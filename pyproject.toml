@@ -1,3 +1,48 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geospatial-data-converter"
+version = "1.2.0"
+description = "Streamlit app for converting geospatial datasets between common formats."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Joshua Bailey" },
+]
+dependencies = [
+    "aiohttp==3.13.5",
+    "beautifulsoup4==4.14.3",
+    "defusedxml==0.7.1",
+    "geopandas==1.1.3",
+    "lxml==6.1.0",
+    "numpy==2.4.4",
+    "pyogrio==0.12.1",
+    "restgdf[geo]>=3,<4",
+    "streamlit==1.57.0",
+    "topojson==1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/joshuasundance-swca/geospatial-data-converter"
+Issues = "https://github.com/joshuasundance-swca/geospatial-data-converter/issues"
+Changelog = "https://github.com/joshuasundance-swca/geospatial-data-converter/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2.2",
+    "pre-commit>=4.3.0",
+    "pytest==9.0.3",
+    "pytest-cov==7.1.0",
+    "twine>=6.1.0",
+]
+
+[tool.setuptools]
+package-dir = { "" = "geospatial-data-converter" }
+py-modules = ["app", "arcgis_loader", "kml_tricks", "utils"]
+
 [tool.pytest.ini_options]
 pythonpath = ["geospatial-data-converter"]
 testpaths = ["tests"]
@@ -11,12 +56,13 @@ tag_message = "{new_version}"
 tag_scope = "default"
 pre_commit_hook = ""
 post_commit_hook = ""
-commit = true
-tag = true
-push = true
+commit = false
+tag = false
+push = false
 
 [tool.bumpver.file_patterns]
 "pyproject.toml" = [
     'current_version = "{version}"',
+    'version = "{version}"',
 ]
 "geospatial-data-converter/app.py" = ['__version__ = "{version}"']
