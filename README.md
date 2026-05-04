@@ -49,6 +49,10 @@ KML exports preserve every selected attribute in both Google Earth-visible
 description tables and KML `ExtendedData`, so polygon metadata survives export
 and round-trips cleanly when the file is reloaded.
 
+KML and KMZ imports also preserve typed `SimpleData` fields from Google Earth
+schemas, so numeric attributes stay numeric when exported to ESRI Shapefile or
+OpenFileGDB.
+
 ## Export options
 - **Reproject** to a target CRS before export (WGS 84, Web Mercator, NAD83, auto UTM zone, or any custom EPSG code)
 - **Select columns** to include in the output (single-file mode)

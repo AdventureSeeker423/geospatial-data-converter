@@ -140,11 +140,56 @@ def load_ge_file(file_path: str) -> gpd.GeoDataFrame:
     raise ValueError("The file must have a .kml or .kmz extension.")
 
 
+def _simple_field_types(kml_soup: bs4.BeautifulSoup) -> dict[str, str]:
+    field_types: dict[str, str] = {}
+    for field in kml_soup.find_all(
+        lambda tag: tag.name and tag.name.lower() == "simplefield",
+    ):
+        name = field.get("name")
+        field_type = field.get("type")
+        if name and field_type:
+            field_types[name] = field_type.lower()
+    return field_types
+
+
+def _coerce_simple_field_value_types(
+    df: pd.DataFrame,
+    field_types: dict[str, str],
+) -> pd.DataFrame:
+    for column, field_type in field_types.items():
+        if column not in df.columns:
+            continue
+
+        if field_type in {"int", "uint", "short", "ushort"}:
+            numeric = pd.to_numeric(df[column], errors="coerce")
+            if numeric.notna().all():
+                df[column] = numeric.astype("Int64")
+        elif field_type in {"float", "double"}:
+            numeric = pd.to_numeric(df[column], errors="coerce")
+            if numeric.notna().all():
+                df[column] = numeric.astype("Float64")
+        elif field_type == "bool":
+            normalized = df[column].astype(str).str.strip().str.lower()
+            bool_map = {
+                "1": True,
+                "0": False,
+                "true": True,
+                "false": False,
+                "yes": True,
+                "no": False,
+            }
+            if normalized.isin(bool_map).all():
+                df[column] = normalized.map(bool_map).astype("boolean")
+
+    return df
+
+
 def extract_data_from_kml_code(kml_code: str) -> pd.DataFrame:
     """Extracts data from KML code into a DataFrame using SimpleData tags, excluding embedded tables in feature descriptions"""
 
     # Parse the KML source code
     soup = bs4.BeautifulSoup(kml_code, features="xml")
+    field_types = _simple_field_types(soup)
 
     # Find all SchemaData tags (representing rows)
     schema_data_tags = soup.find_all(
@@ -176,7 +221,7 @@ def extract_data_from_kml_code(kml_code: str) -> pd.DataFrame:
     # Convert the row dictionaries into a DataFrame
     df = pd.DataFrame(row_dicts)
 
-    return df
+    return _coerce_simple_field_value_types(df, field_types)
 
 
 def extract_kml_code_from_file(file_path: str) -> str:
