@@ -3,9 +3,12 @@ import json
 import math
 import os
 import zipfile
+from html import escape
 import geopandas as gpd
 import pandas as pd
 import topojson
+from defusedxml import ElementTree as ET
+from pyogrio.errors import DataLayerError
 
 from pyproj import CRS
 from pyproj.exceptions import CRSError
@@ -50,6 +53,8 @@ _ESRI_WKID_ALIASES = {
     102100: 3857,
     102113: 3857,
 }
+
+_KML_NAMESPACE = "http://www.opengis.net/kml/2.2"
 
 
 def auto_utm_epsg_for_gdf(gdf: gpd.GeoDataFrame) -> int:
@@ -250,8 +255,8 @@ def read_gpx(file_path: str) -> gpd.GeoDataFrame:
     for layer in ("waypoints", "tracks", "routes", "track_points", "route_points"):
         try:
             gdf = gpd.read_file(file_path, layer=layer, engine="pyogrio")
-        except Exception:
-            continue  # nosec B112
+        except DataLayerError:
+            continue
         if len(gdf) > 0:
             return gdf
     # Fall back to driver default
@@ -316,6 +321,118 @@ def write_gpx(gdf: gpd.GeoDataFrame, out_path: str) -> None:
         engine="pyogrio",
         layer=layer,
     )
+
+
+def _kml_tag(tag_name: str) -> str:
+    return f"{{{_KML_NAMESPACE}}}{tag_name}"
+
+
+def _stringify_kml_value(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    if hasattr(value, "item"):
+        value = value.item()
+    return str(value)
+
+
+def _kml_field_type(series: pd.Series) -> str:
+    if pd.api.types.is_bool_dtype(series):
+        return "bool"
+    if pd.api.types.is_integer_dtype(series):
+        return "int"
+    if pd.api.types.is_float_dtype(series):
+        return "double"
+    return "string"
+
+
+def _kml_description_table(attributes: dict[str, str]) -> str:
+    rows = "".join(
+        ("<tr>" f"<th>{escape(name)}</th>" f"<td>{escape(value)}</td>" "</tr>")
+        for name, value in attributes.items()
+    )
+    return (
+        '<table border="1" cellspacing="0" cellpadding="2">'
+        "<tbody>"
+        f"{rows}"
+        "</tbody></table>"
+    )
+
+
+def write_kml(gdf: gpd.GeoDataFrame, out_path: str) -> None:
+    gdf.to_file(out_path, driver="KML", engine="pyogrio")
+
+    geometry_column = gdf.geometry.name
+    attribute_columns = [column for column in gdf.columns if column != geometry_column]
+    if not attribute_columns:
+        return
+
+    tree = ET.parse(out_path)
+    root = tree.getroot()
+    document = root.find(_kml_tag("Document"))
+    if document is None:
+        raise ValueError("Generated KML is missing a Document element.")
+
+    schema = document.find(_kml_tag("Schema"))
+    if schema is None:
+        schema_name = os.path.splitext(os.path.basename(out_path))[0]
+        schema = document.makeelement(
+            _kml_tag("Schema"),
+            {"name": schema_name, "id": schema_name},
+        )
+        document.append(schema)
+
+    for child in list(schema):
+        if child.tag == _kml_tag("SimpleField"):
+            schema.remove(child)
+
+    for column in attribute_columns:
+        simple_field = schema.makeelement(
+            _kml_tag("SimpleField"),
+            {"name": str(column), "type": _kml_field_type(gdf[column])},
+        )
+        schema.append(simple_field)
+
+    placemarks = root.findall(f".//{_kml_tag('Placemark')}")
+    if len(placemarks) != len(gdf):
+        raise ValueError(
+            "Generated KML placemark count does not match the exported rows.",
+        )
+
+    for placemark, (_, row) in zip(
+        placemarks,
+        gdf.loc[:, attribute_columns].iterrows(),
+    ):
+        attributes = {
+            str(column): _stringify_kml_value(value) for column, value in row.items()
+        }
+
+        description = placemark.find(_kml_tag("description"))
+        if description is None:
+            description = placemark.makeelement(_kml_tag("description"), {})
+            placemark.append(description)
+        description.text = _kml_description_table(attributes)
+
+        extended_data = placemark.find(_kml_tag("ExtendedData"))
+        if extended_data is None:
+            extended_data = placemark.makeelement(_kml_tag("ExtendedData"), {})
+            placemark.append(extended_data)
+        for child in list(extended_data):
+            extended_data.remove(child)
+
+        schema_data = extended_data.makeelement(
+            _kml_tag("SchemaData"),
+            {"schemaUrl": f"#{schema.attrib.get('id', 'schema')}"},
+        )
+        extended_data.append(schema_data)
+        for name, value in attributes.items():
+            simple_data = schema_data.makeelement(
+                _kml_tag("SimpleData"),
+                {"name": name},
+            )
+            simple_data.text = value
+            schema_data.append(simple_data)
+
+    tree.write(out_path, encoding="utf-8", xml_declaration=True)
 
 
 def _esri_geometry_to_shapely(geom: dict):
@@ -449,6 +566,8 @@ def convert(gdf: gpd.GeoDataFrame, output_name: str, output_format: str) -> byte
                 esri_file.write(gdf_to_esrijson(gdf))
         elif output_format == "GPX":
             write_gpx(gdf, out_path)
+        elif output_format == "KML":
+            write_kml(gdf, out_path)
         else:
             gdf.to_file(out_path, driver=output_format, engine="pyogrio")
 

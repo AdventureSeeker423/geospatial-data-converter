@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pytest
+from defusedxml import ElementTree as ET
 from shapely.geometry import Point, Polygon
 
 from utils import (
@@ -105,3 +106,64 @@ def test_auto_utm_epsg_for_gdf_rejects_empty_geometry_frames() -> None:
 
     with pytest.raises(ValueError, match="at least one non-empty geometry"):
         auto_utm_epsg_for_gdf(gdf)
+
+
+def test_kml_conversion_preserves_all_attributes() -> None:
+    gdf = gpd.GeoDataFrame(
+        [
+            {
+                "alpha": "A",
+                "beta": "B",
+                "gamma": 3,
+                "geometry": Polygon([(0, 0), (0, 1), (1, 1), (1, 0)]),
+            },
+        ],
+        crs="EPSG:4326",
+    )
+
+    converted = convert(gdf, "issue54.kml", "KML")
+    root = ET.fromstring(converted)
+    namespace = {"kml": "http://www.opengis.net/kml/2.2"}
+
+    simple_fields = {
+        field.attrib["name"] for field in root.findall(".//kml:SimpleField", namespace)
+    }
+    assert simple_fields == {"alpha", "beta", "gamma"}
+
+    simple_data = {
+        field.attrib["name"]: field.text
+        for field in root.findall(".//kml:SimpleData", namespace)
+    }
+    assert simple_data == {"alpha": "A", "beta": "B", "gamma": "3"}
+
+    description = root.findtext(
+        ".//kml:Placemark/kml:description",
+        namespaces=namespace,
+    )
+    assert description is not None
+    for token in ("alpha", "A", "beta", "B", "gamma", "3"):
+        assert token in description
+
+
+def test_exported_kml_round_trips_all_attributes(tmp_path: Path) -> None:
+    original = gpd.GeoDataFrame(
+        [
+            {
+                "alpha": "A",
+                "beta": "B",
+                "gamma": 3,
+                "geometry": Polygon([(0, 0), (0, 1), (1, 1), (1, 0)]),
+            },
+        ],
+        crs="EPSG:4326",
+    )
+
+    output_path = tmp_path / "issue54.kml"
+    output_path.write_bytes(convert(original, output_path.name, "KML"))
+
+    with output_path.open("rb") as exported:
+        reloaded = read_file(exported)
+
+    assert reloaded.loc[0, "alpha"] == "A"
+    assert reloaded.loc[0, "beta"] == "B"
+    assert str(reloaded.loc[0, "gamma"]) == "3"
