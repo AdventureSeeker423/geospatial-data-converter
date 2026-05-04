@@ -20,9 +20,16 @@ def parse_descriptions_to_geodf(geodf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Parses Descriptions from Google Earth file to a GeoDataFrame object"""
 
     dataframes = []
+    description_column = next(
+        (column for column in geodf.columns if column.lower() == "description"),
+        None,
+    )
+
+    if description_column is None:
+        raise ValueError("Google Earth data is missing a description column.")
 
     # Iterate over descriptions and extract data
-    for desc in geodf["Description"]:
+    for desc in geodf[description_column]:
         desc_as_io = StringIO(desc)
 
         # Try to read the description into a DataFrame
@@ -139,9 +146,11 @@ def extract_data_from_kml_code(kml_code: str) -> pd.DataFrame:
     # Create a generator that yields a dictionary for each row, containing the Placemark name and each SimpleData field
     row_dicts = (
         {
-            "Placemark_name": tag.parent.parent.find("name").text
-            if tag.parent.parent.find("name")
-            else "[no name]",
+            "Placemark_name": (
+                tag.parent.parent.find("name").text
+                if tag.parent.parent.find("name")
+                else "[no name]"
+            ),
             **{field.get("name"): field.text for field in tag.find_all("simpledata")},
         }
         for tag in schema_data_tags
