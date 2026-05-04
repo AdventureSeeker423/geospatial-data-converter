@@ -1,5 +1,5 @@
 ---
-title: geospatial-data-converter
+title: Geospatial Data Converter
 emoji: 🌎
 colorFrom: green
 colorTo: blue
@@ -9,7 +9,7 @@ pinned: true
 tags: [geospatial, streamlit, docker]
 ---
 
-# geospatial-data-converter
+# Geospatial Data Converter
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![python](https://img.shields.io/badge/Python-3.14-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
@@ -36,13 +36,27 @@ tags: [geospatial, streamlit, docker]
 This project showcases a simple geospatial data converter using [Streamlit](https://streamlit.io) and [GeoPandas](https://geopandas.org/).
 
 # Features
-- User-friendly interface for easy data conversion
-- Supports conversion from the following input formats:
-  - ArcGIS featurelayer URL
-  - Uploaded file: KML, KMZ, GeoJSON, ZIP, etc
-- Provides data in the selected output format
-- Presents data preview (geometry omitted for display purposes)
-- Download button for the converted data
+
+## Input sources
+- **File upload** (single or batch) — KML, KMZ, GeoJSON, Esri Feature JSON (.json), WKT, GPX, ZIP (shapefile or file geodatabase)
+- **ArcGIS feature layer URL** — fetches directly from ArcGIS REST services
+- **Paste WKT** — paste Well-Known Text geometries straight from a database query or clipboard
+
+## Output formats
+CSV, KML, GeoJSON, TopoJSON, WKT, EsriJSON, GPX, ESRI Shapefile, OpenFileGDB
+
+## Export options
+- **Reproject** to a target CRS before export (WGS 84, Web Mercator, NAD83, auto UTM zone, or any custom EPSG code)
+- **Select columns** to include in the output (single-file mode)
+- **Fix invalid geometries** (`make_valid()`) so self-intersecting polygons don't break downstream tools
+
+## Preview
+- Interactive **map preview** with full polygon/line/point rendering (pydeck) and hover tooltips showing attribute values
+- **Attribute table** with geometry omitted for display purposes
+- Summary **metrics** (feature count, attribute count, CRS, geometry types)
+
+## Batch mode
+Upload multiple files at once, convert them all with shared settings, and download a single ZIP
 
 # Deployment
 `geospatial-data-converter` is deployed as a [Docker image](https://hub.docker.com/r/<your-dockerhub-username>/geospatial-data-converter) based on the `python:3.14-slim-bookworm` image.
