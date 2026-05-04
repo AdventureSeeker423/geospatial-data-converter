@@ -45,6 +45,10 @@ This project showcases a simple geospatial data converter using [Streamlit](http
 ## Output formats
 CSV, KML, GeoJSON, TopoJSON, WKT, EsriJSON, GPX, ESRI Shapefile, OpenFileGDB
 
+KML exports preserve every selected attribute in both Google Earth-visible
+description tables and KML `ExtendedData`, so polygon metadata survives export
+and round-trips cleanly when the file is reloaded.
+
 ## Export options
 - **Reproject** to a target CRS before export (WGS 84, Web Mercator, NAD83, auto UTM zone, or any custom EPSG code)
 - **Select columns** to include in the output (single-file mode)

@@ -31,7 +31,7 @@ INPUT_FORMAT_HELP = (
 
 OUTPUT_FORMAT_HELP = {
     "CSV": "Comma-separated values; geometry is serialised as WKT.",
-    "KML": "Google Earth Keyhole Markup Language.",
+    "KML": "Google Earth Keyhole Markup Language with full attribute tables preserved.",
     "GeoJSON": "RFC 7946 GeoJSON (text).",
     "TopoJSON": "Topology-preserving JSON.",
     "WKT": "One Well-Known Text geometry per line.",
@@ -401,8 +401,8 @@ elif len(datasets) == 1:
                 "Geometry types: "
                 + ", ".join(f"{t} ({n:,})" for t, n in geom_types.items()),
             )
-    except Exception:
-        pass  # nosec B110
+    except (AttributeError, TypeError, ValueError):
+        pass
 
     st.divider()
 

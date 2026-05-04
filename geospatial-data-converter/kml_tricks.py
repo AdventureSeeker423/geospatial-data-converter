@@ -3,7 +3,6 @@ from io import StringIO
 
 import bs4
 import geopandas as gpd
-import lxml  # nosec
 import pandas as pd
 from shapely.geometry import (
     Point,
@@ -148,17 +147,28 @@ def extract_data_from_kml_code(kml_code: str) -> pd.DataFrame:
     soup = bs4.BeautifulSoup(kml_code, features="xml")
 
     # Find all SchemaData tags (representing rows)
-    schema_data_tags = soup.find_all("schemadata")
+    schema_data_tags = soup.find_all(
+        lambda tag: tag.name and tag.name.lower() == "schemadata",
+    )
 
     # Create a generator that yields a dictionary for each row, containing the Placemark name and each SimpleData field
     row_dicts = (
         {
             "Placemark_name": (
-                tag.parent.parent.find("name").text
-                if tag.parent.parent.find("name")
+                tag.parent.parent.find(
+                    lambda child: child.name and child.name.lower() == "name",
+                ).text
+                if tag.parent.parent.find(
+                    lambda child: child.name and child.name.lower() == "name",
+                )
                 else "[no name]"
             ),
-            **{field.get("name"): field.text for field in tag.find_all("simpledata")},
+            **{
+                field.get("name"): field.text
+                for field in tag.find_all(
+                    lambda child: child.name and child.name.lower() == "simpledata",
+                )
+            },
         }
         for tag in schema_data_tags
     )
@@ -216,6 +226,13 @@ def extract_data_from_ge_file(file_path: str) -> gpd.GeoDataFrame:
     return geo_df
 
 
+def _is_lxml_parse_error(exc: Exception) -> bool:
+    return exc.__class__.__module__ == "lxml.etree" and exc.__class__.__name__ in {
+        "ParserError",
+        "XMLSyntaxError",
+    }
+
+
 def load_ge_data(file_path: str) -> gpd.GeoDataFrame:
     """Extracts data from a Google Earth file (KML or KMZ) and handles errors due to parsing issues"""
 
@@ -230,12 +247,12 @@ def load_ge_data(file_path: str) -> gpd.GeoDataFrame:
 
     try:
         data_df = primary_func(file_path)
-    except (
-        pd.errors.ParserError,
-        lxml.etree.ParserError,
-        lxml.etree.XMLSyntaxError,
-        ValueError,
-    ):
+    except Exception as exc:
+        if not (
+            isinstance(exc, (pd.errors.ParserError, ValueError))
+            or _is_lxml_parse_error(exc)
+        ):
+            raise
         data_df = fallback_func(file_path)
 
     return data_df
