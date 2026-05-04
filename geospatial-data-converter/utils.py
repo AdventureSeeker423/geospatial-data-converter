@@ -1,5 +1,6 @@
 import io
 import json
+import math
 import os
 import zipfile
 import geopandas as gpd
@@ -7,6 +8,7 @@ import pandas as pd
 import topojson
 
 from pyproj import CRS
+from pyproj.exceptions import CRSError
 from shapely import wkt as shapely_wkt
 from shapely.geometry import (
     LineString,
@@ -50,23 +52,46 @@ _ESRI_WKID_ALIASES = {
 }
 
 
-def _resolve_esri_crs(spatial_reference: dict) -> CRS | None:
+def auto_utm_epsg_for_gdf(gdf: gpd.GeoDataFrame) -> int:
+    """Pick an appropriate UTM zone EPSG code for a GeoDataFrame's centroid."""
+    src = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty]
+    if len(src) == 0:
+        raise ValueError("Auto UTM zone requires at least one non-empty geometry.")
+    if src.crs is None:
+        raise ValueError("Auto UTM zone requires a dataset with a known CRS.")
+    if src.crs.to_epsg() != 4326:
+        src = src.to_crs(4326)
+    minx, miny, maxx, maxy = src.total_bounds
+    if any(math.isnan(value) for value in (minx, miny, maxx, maxy)):
+        raise ValueError("Auto UTM zone could not be computed from the dataset bounds.")
+    lon = (minx + maxx) / 2.0
+    lat = (miny + maxy) / 2.0
+    zone = int((lon + 180.0) / 6.0) + 1
+    zone = max(1, min(60, zone))
+    return (32600 if lat >= 0 else 32700) + zone
+
+
+def _resolve_esri_crs(spatial_reference: dict[str, object]) -> CRS | None:
     """Resolve ArcGIS spatial references, including common Esri WKID aliases."""
-    candidates = []
+    candidates: list[str | int] = []
     for key in ("wkt", "latestWkt"):
         value = spatial_reference.get(key)
-        if value:
+        if isinstance(value, str) and value:
             candidates.append(value)
 
     for key in ("latestWkid", "wkid"):
         wkid = spatial_reference.get(key)
         if wkid in (None, ""):
             continue
-        candidates.append(wkid)
-        alias = _ESRI_WKID_ALIASES.get(wkid)
-        if alias is not None:
-            candidates.append(alias)
-        candidates.append(f"ESRI:{wkid}")
+        if isinstance(wkid, int):
+            candidates.append(wkid)
+            alias = _ESRI_WKID_ALIASES.get(wkid)
+            if alias is not None:
+                candidates.append(alias)
+            candidates.append(f"ESRI:{wkid}")
+        elif isinstance(wkid, str):
+            candidates.append(wkid)
+            candidates.append(f"ESRI:{wkid}")
 
     if not candidates:
         candidates.append(4326)
@@ -74,7 +99,7 @@ def _resolve_esri_crs(spatial_reference: dict) -> CRS | None:
     for candidate in candidates:
         try:
             return CRS.from_user_input(candidate)
-        except Exception:
+        except (CRSError, TypeError, ValueError):
             continue
     return None
 
@@ -117,7 +142,7 @@ def _group_esri_rings(rings: list[list[tuple[float, float]]]) -> list[Polygon]:
     return polygons
 
 
-def _shapely_to_esri_geometry(geom, sr: dict) -> dict:
+def _shapely_to_esri_geometry(geom, sr: dict[str, object]) -> dict[str, object] | None:
     """Convert a shapely geometry to an Esri JSON geometry dict."""
     if geom is None:
         return None
@@ -156,7 +181,7 @@ def gdf_to_esrijson(gdf: gpd.GeoDataFrame) -> str:
             wkid = gdf.crs.to_epsg()
         except Exception:
             wkid = None
-    sr = {"wkid": wkid} if wkid else {"wkid": 4326}
+    sr: dict[str, object] = {"wkid": wkid} if wkid else {"wkid": 4326}
 
     geom_type = None
     for g in gdf.geometry:
@@ -167,7 +192,7 @@ def gdf_to_esrijson(gdf: gpd.GeoDataFrame) -> str:
     features = []
     attrs_df = gdf.drop(columns=[gdf.geometry.name])
     for geom, (_, row) in zip(gdf.geometry, attrs_df.iterrows()):
-        attributes = {}
+        attributes: dict[str, object | None] = {}
         for col, val in row.items():
             if pd.isna(val):
                 attributes[col] = None
@@ -207,9 +232,11 @@ def read_wkt_text(text: str) -> gpd.GeoDataFrame:
 
 def read_wkt(file: BinaryIO) -> gpd.GeoDataFrame:
     """Read a WKT file and return a GeoDataFrame."""
-    content = file.read()
-    if isinstance(content, bytes):
-        content = content.decode("utf-8")
+    raw_content = file.read()
+    if isinstance(raw_content, bytes):
+        content = raw_content.decode("utf-8")
+    else:
+        content = raw_content
     return read_wkt_text(content)
 
 

@@ -10,7 +10,13 @@ import pydeck as pdk
 import streamlit as st
 
 from arcgis_loader import get_arcgis_data
-from utils import convert, output_format_dict, read_file, read_wkt_text
+from utils import (
+    auto_utm_epsg_for_gdf,
+    convert,
+    output_format_dict,
+    read_file,
+    read_wkt_text,
+)
 
 __version__ = "1.2.0"
 APP_NAME = "Geospatial Data Converter"
@@ -82,32 +88,13 @@ def _clear_all() -> None:
     _reset_converted()
 
 
-def _utm_epsg_for_gdf(gdf: gpd.GeoDataFrame) -> int:
-    """Pick an appropriate UTM zone EPSG code for a GeoDataFrame's centroid."""
-    src = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty]
-    if len(src) == 0:
-        raise ValueError("Auto UTM zone requires at least one non-empty geometry.")
-    if src.crs is None:
-        raise ValueError("Auto UTM zone requires a dataset with a known CRS.")
-    if src.crs.to_epsg() != 4326:
-        src = src.to_crs(4326)
-    minx, miny, maxx, maxy = src.total_bounds
-    if any(math.isnan(value) for value in (minx, miny, maxx, maxy)):
-        raise ValueError("Auto UTM zone could not be computed from the dataset bounds.")
-    lon = (minx + maxx) / 2.0
-    lat = (miny + maxy) / 2.0
-    zone = int((lon + 180.0) / 6.0) + 1
-    zone = max(1, min(60, zone))
-    return (32600 if lat >= 0 else 32700) + zone
-
-
 def _resolve_target_crs(choice: str, custom_epsg: str, gdf: gpd.GeoDataFrame):
     """Return the EPSG int to reproject to, or None to keep source."""
     spec = CRS_PRESETS[choice]
     if spec is None:
         return None
     if spec == "auto_utm":
-        return _utm_epsg_for_gdf(gdf)
+        return auto_utm_epsg_for_gdf(gdf)
     if spec == "custom":
         if not custom_epsg:
             return None

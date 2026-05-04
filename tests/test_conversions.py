@@ -2,10 +2,17 @@ import io
 import zipfile
 from pathlib import Path
 
+import geopandas as gpd
 import pytest
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 
-from utils import convert, output_format_dict, read_esrijson, read_file
+from utils import (
+    auto_utm_epsg_for_gdf,
+    convert,
+    output_format_dict,
+    read_esrijson,
+    read_file,
+)
 
 input_exts = ["kml", "kmz", "geojson", "json", "zip", "wkt", "gpx"]
 output_exts = output_format_dict.keys()
@@ -82,3 +89,19 @@ def test_read_esrijson_respects_esri_ring_orientation() -> None:
     assert isinstance(polygon, Polygon)
     assert len(polygon.interiors) == 1
     assert polygon.area == pytest.approx(12.0)
+
+
+def test_auto_utm_epsg_for_gdf_returns_expected_zone() -> None:
+    gdf = gpd.GeoDataFrame(
+        geometry=[Point(-122.33, 47.60)],
+        crs="EPSG:4326",
+    )
+
+    assert auto_utm_epsg_for_gdf(gdf) == 32610
+
+
+def test_auto_utm_epsg_for_gdf_rejects_empty_geometry_frames() -> None:
+    gdf = gpd.GeoDataFrame(geometry=[None], crs="EPSG:4326")
+
+    with pytest.raises(ValueError, match="at least one non-empty geometry"):
+        auto_utm_epsg_for_gdf(gdf)
