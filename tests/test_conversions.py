@@ -3,6 +3,7 @@ import zipfile
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 from defusedxml import ElementTree as ET
 from shapely.geometry import Point, Polygon
@@ -167,3 +168,56 @@ def test_exported_kml_round_trips_all_attributes(tmp_path: Path) -> None:
     assert reloaded.loc[0, "alpha"] == "A"
     assert reloaded.loc[0, "beta"] == "B"
     assert str(reloaded.loc[0, "gamma"]) == "3"
+
+
+def test_kmz_numeric_attributes_round_trip_to_shapefile(tmp_path: Path) -> None:
+    kmz_path = tmp_path / "numeric-fields.kmz"
+    kmz_xml = """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<kml xmlns=\"http://www.opengis.net/kml/2.2\">
+    <Document>
+        <Schema id=\"parcel\">
+            <SimpleField name=\"acreage\" type=\"double\"/>
+            <SimpleField name=\"unit_count\" type=\"int\"/>
+            <SimpleField name=\"label\" type=\"string\"/>
+        </Schema>
+        <Placemark>
+            <name>parcel-a</name>
+            <ExtendedData>
+                <SchemaData schemaUrl=\"#parcel\">
+                    <SimpleData name=\"acreage\">12.5</SimpleData>
+                    <SimpleData name=\"unit_count\">3</SimpleData>
+                    <SimpleData name=\"label\">north</SimpleData>
+                </SchemaData>
+            </ExtendedData>
+            <Point><coordinates>-122.33,47.60,0</coordinates></Point>
+        </Placemark>
+    </Document>
+</kml>
+"""
+
+    with zipfile.ZipFile(kmz_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("doc.kml", kmz_xml)
+
+    with kmz_path.open("rb") as uploaded:
+        loaded = read_file(uploaded)
+
+    assert loaded.loc[0, "label"] == "north"
+    assert pd.api.types.is_float_dtype(loaded["acreage"])
+    assert pd.api.types.is_integer_dtype(loaded["unit_count"])
+    assert loaded.loc[0, "acreage"] == pytest.approx(12.5)
+    assert loaded.loc[0, "unit_count"] == 3
+
+    converted = convert(loaded, "numeric-fields.shp", "ESRI Shapefile")
+    extracted_dir = tmp_path / "shapefile"
+    extracted_dir.mkdir()
+    with zipfile.ZipFile(io.BytesIO(converted)) as archive:
+        archive.extractall(extracted_dir)
+
+    shapefile = next(extracted_dir.glob("*.shp"))
+    round_tripped = gpd.read_file(shapefile, engine="pyogrio")
+
+    assert round_tripped.loc[0, "label"] == "north"
+    assert pd.api.types.is_float_dtype(round_tripped["acreage"])
+    assert pd.api.types.is_integer_dtype(round_tripped["unit_count"])
+    assert round_tripped.loc[0, "acreage"] == pytest.approx(12.5)
+    assert round_tripped.loc[0, "unit_count"] == 3
