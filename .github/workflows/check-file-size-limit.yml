@@ -3,10 +3,16 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   check-file-sizes:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
       - name: Check large files
         uses: ActionsDesk/lfs-warning@v3.3
         with:
