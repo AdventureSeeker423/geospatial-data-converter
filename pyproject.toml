@@ -20,4 +20,3 @@ push = true
     'current_version = "{version}"',
 ]
 "geospatial-data-converter/app.py" = ['__version__ = "{version}"']
-"kubernetes/resources.yaml" = ['        image: joshuasundance/geospatial-data-converter:{version}']

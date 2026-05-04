@@ -74,11 +74,6 @@ Upload multiple files at once, convert them all with shared settings, and downlo
 ## Run Tests (with local Docker container)
 1. Run in terminal: `docker compose run --rm test`
 
-## Kubernetes
-1. Clone the repo. Navigate to cloned repo directory
-2. Run bash script: `/bin/bash ./kubernetes/deploy.sh`
-3. Get the IP address for your new service: `kubectl get service geospatial-data-converter`
-
 # Links
 - [Streamlit](https://streamlit.io)
 - [GeoPandas](https://geopandas.org/)
