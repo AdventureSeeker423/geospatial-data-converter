@@ -1,11 +1,9 @@
 import asyncio
 import os
 
-import geopandas as gpd
 import streamlit as st
-from aiohttp import ClientSession
-from restgdf import FeatureLayer
 
+from arcgis_loader import get_arcgis_data
 from utils import read_file, convert, output_format_dict
 
 __version__ = "1.0.2"
@@ -44,15 +42,6 @@ st.file_uploader(
     key="uploaded_file",
     type=["kml", "kmz", "geojson", "zip"],
 )
-
-
-async def get_arcgis_data(url: str) -> tuple[str, gpd.GeoDataFrame]:
-    """Get data from an ArcGIS featurelayer"""
-    async with ClientSession() as session:
-        rest = await FeatureLayer.from_url(url, session=session)
-        name = rest.name
-        gdf = await rest.getgdf()
-    return name, gdf
 
 
 if st.session_state.arcgis_url:

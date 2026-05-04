@@ -50,7 +50,7 @@ This project showcases a simple geospatial data converter using [Streamlit](http
 ## With Docker (pull from Docker Hub)
 1. Run in terminal:
 `docker run -p 7860:7860 <your-dockerhub-username>/geospatial-data-converter:latest`
-2. Open http://localhost:8501 in your browser
+2. Open http://localhost:7860 in your browser
 
 ## Docker Compose (build locally)
 1. Clone the repo. Navigate to cloned repo directory
@@ -58,7 +58,7 @@ This project showcases a simple geospatial data converter using [Streamlit](http
 3. Open http://localhost:7860 in your browser
 
 ## Run Tests (with local Docker container)
-1. Run in terminal: `docker compose run test`
+1. Run in terminal: `docker compose run --rm test`
 
 ## Kubernetes
 1. Clone the repo. Navigate to cloned repo directory
