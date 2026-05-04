@@ -20,24 +20,20 @@ def parse_descriptions_to_geodf(geodf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Parses Descriptions from Google Earth file to a GeoDataFrame object"""
 
     dataframes = []
-
-    # The description column has been lowercased ("description") since GDAL 3.8;
-    # older versions used "Description". Support both to stay compatible.
-    description_col = next(
-        (col for col in ("Description", "description") if col in geodf.columns),
+    description_column = next(
+        (column for column in geodf.columns if column.lower() == "description"),
         None,
     )
-    if description_col is None:
-        raise KeyError(
-            "Expected a 'Description' or 'description' column in the KML data",
-        )
+
+    if description_column is None:
+        raise ValueError("Google Earth data is missing a description column.")
 
     # Iterate over descriptions and extract data
-    for desc in geodf[description_col]:
+    for desc in geodf[description_column]:
         if desc is None or (isinstance(desc, float) and pd.isna(desc)):
             dataframes.append(pd.DataFrame())
             continue
-        desc_as_io = StringIO(desc)
+        desc_as_io = StringIO(str(desc))
 
         # Try to read the description into a DataFrame
         parsed_html = pd.read_html(desc_as_io)

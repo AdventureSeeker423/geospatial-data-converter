@@ -8,10 +8,9 @@ import zipfile
 import geopandas as gpd
 import pydeck as pdk
 import streamlit as st
-from aiohttp import ClientSession
-from restgdf import FeatureLayer
 
-from utils import read_file, read_wkt_text, convert, output_format_dict
+from arcgis_loader import get_arcgis_data
+from utils import convert, output_format_dict, read_file, read_wkt_text
 
 __version__ = "1.2.0"
 APP_NAME = "Geospatial Data Converter"
@@ -71,15 +70,6 @@ st.set_page_config(
 )
 
 
-async def get_arcgis_data(url: str) -> tuple[str, gpd.GeoDataFrame]:
-    """Get data from an ArcGIS feature layer"""
-    async with ClientSession() as session:
-        rest = await FeatureLayer.from_url(url, session=session)
-        name = rest.name
-        gdf = await rest.getgdf()
-    return name, gdf
-
-
 def _reset_converted() -> None:
     st.session_state.converted_data = None
     st.session_state.converted_fn = None
@@ -94,10 +84,16 @@ def _clear_all() -> None:
 
 def _utm_epsg_for_gdf(gdf: gpd.GeoDataFrame) -> int:
     """Pick an appropriate UTM zone EPSG code for a GeoDataFrame's centroid."""
-    src = gdf
-    if src.crs is not None and src.crs.to_epsg() != 4326:
+    src = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty]
+    if len(src) == 0:
+        raise ValueError("Auto UTM zone requires at least one non-empty geometry.")
+    if src.crs is None:
+        raise ValueError("Auto UTM zone requires a dataset with a known CRS.")
+    if src.crs.to_epsg() != 4326:
         src = src.to_crs(4326)
     minx, miny, maxx, maxy = src.total_bounds
+    if any(math.isnan(value) for value in (minx, miny, maxx, maxy)):
+        raise ValueError("Auto UTM zone could not be computed from the dataset bounds.")
     lon = (minx + maxx) / 2.0
     lat = (miny + maxy) / 2.0
     zone = int((lon + 180.0) / 6.0) + 1

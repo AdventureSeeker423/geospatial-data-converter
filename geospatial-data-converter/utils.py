@@ -6,15 +6,18 @@ import geopandas as gpd
 import pandas as pd
 import topojson
 
+from pyproj import CRS
 from shapely import wkt as shapely_wkt
 from shapely.geometry import (
     LineString,
+    LinearRing,
     MultiLineString,
     MultiPoint,
     MultiPolygon,
     Point,
     Polygon,
 )
+from shapely.geometry.polygon import orient
 from tempfile import TemporaryDirectory
 from typing import BinaryIO
 from kml_tricks import load_ge_data
@@ -40,6 +43,78 @@ _ESRI_GEOMETRY_TYPES = {
     "Polygon": "esriGeometryPolygon",
     "MultiPolygon": "esriGeometryPolygon",
 }
+
+_ESRI_WKID_ALIASES = {
+    102100: 3857,
+    102113: 3857,
+}
+
+
+def _resolve_esri_crs(spatial_reference: dict) -> CRS | None:
+    """Resolve ArcGIS spatial references, including common Esri WKID aliases."""
+    candidates = []
+    for key in ("wkt", "latestWkt"):
+        value = spatial_reference.get(key)
+        if value:
+            candidates.append(value)
+
+    for key in ("latestWkid", "wkid"):
+        wkid = spatial_reference.get(key)
+        if wkid in (None, ""):
+            continue
+        candidates.append(wkid)
+        alias = _ESRI_WKID_ALIASES.get(wkid)
+        if alias is not None:
+            candidates.append(alias)
+        candidates.append(f"ESRI:{wkid}")
+
+    if not candidates:
+        candidates.append(4326)
+
+    for candidate in candidates:
+        try:
+            return CRS.from_user_input(candidate)
+        except Exception:
+            continue
+    return None
+
+
+def _group_esri_rings(rings: list[list[tuple[float, float]]]) -> list[Polygon]:
+    """Build polygons from Esri rings using orientation first, then containment."""
+    shells: list[list[tuple[float, float]]] = []
+    holes: list[list[tuple[float, float]]] = []
+    for ring in rings:
+        if len(ring) < 4:
+            continue
+        if LinearRing(ring).is_ccw:
+            holes.append(ring)
+        else:
+            shells.append(ring)
+
+    if not shells and holes:
+        fallback_shell = max(holes, key=lambda ring: abs(Polygon(ring).area))
+        shells.append(fallback_shell)
+        holes = [ring for ring in holes if ring is not fallback_shell]
+
+    polygons = []
+    unassigned_holes = holes[:]
+    for shell in shells:
+        shell_polygon = Polygon(shell)
+        shell_holes = []
+        remaining_holes = []
+        for hole in unassigned_holes:
+            hole_polygon = Polygon(hole)
+            if shell_polygon.covers(hole_polygon.representative_point()):
+                shell_holes.append(hole)
+            else:
+                remaining_holes.append(hole)
+        polygons.append(orient(Polygon(shell, shell_holes), sign=1.0))
+        unassigned_holes = remaining_holes
+
+    for ring in unassigned_holes:
+        polygons.append(orient(Polygon(ring), sign=1.0))
+
+    return polygons
 
 
 def _shapely_to_esri_geometry(geom, sr: dict) -> dict:
@@ -231,17 +306,7 @@ def _esri_geometry_to_shapely(geom: dict):
         return MultiLineString(paths)
     if "rings" in geom:
         rings = [[(pt[0], pt[1]) for pt in ring] for ring in geom["rings"]]
-        polygons = []
-        for ring in rings:
-            shell = Polygon(ring)
-            if polygons and not shell.exterior.is_ccw:
-                # Inner ring of previous polygon
-                outer = polygons[-1]
-                polygons[-1] = Polygon(
-                    outer.exterior.coords, list(outer.interiors) + [ring]
-                )
-            else:
-                polygons.append(shell)
+        polygons = _group_esri_rings(rings)
         if len(polygons) == 1:
             return polygons[0]
         return MultiPolygon(polygons)
@@ -252,8 +317,7 @@ def read_esrijson(feature_set: dict) -> gpd.GeoDataFrame:
     """Convert a parsed Esri Feature JSON dict to a GeoDataFrame."""
     features = feature_set.get("features", [])
     sr = feature_set.get("spatialReference") or {}
-    wkid = sr.get("latestWkid") or sr.get("wkid") or 4326
-    crs = f"EPSG:{wkid}"
+    crs = _resolve_esri_crs(sr)
 
     records = []
     geometries = []
