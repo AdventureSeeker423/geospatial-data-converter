@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - ".github/workflows/**"
+      - "geospatial-data-converter/**"
+      - "tests/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "dev-requirements.txt"
+      - "README.md"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "geospatial-data-converter/**"
+      - "tests/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "dev-requirements.txt"
+      - "README.md"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install lint dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r dev-requirements.txt
+
+      - name: Run pre-commit on tracked files
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r dev-requirements.txt
+
+      - name: Run test suite
+        run: python -m pytest -q
+
+  build-distributions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r dev-requirements.txt
+
+      - name: Build release artifacts
+        run: python -m build
+
+      - name: Check release artifacts
+        run: python -m twine check --strict dist/*
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Build runtime image
+        run: docker build --target runtime -t geospatial-data-converter:ci .
+
+      - name: Smoke test runtime image
+        run: |
+          docker run --rm geospatial-data-converter:ci python -c "import sys; sys.path.insert(0, '/home/appuser/geospatial-data-converter'); import app; print(app.__version__)"
+
+  ci:
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - test
+      - build-distributions
+      - docker-smoke
+    if: always()
+    steps:
+      - name: Enforce required jobs
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failures = [name for name, data in needs.items() if data["result"] != "success"]
+          if failures:
+              print("Required jobs failed:", ", ".join(failures))
+              sys.exit(1)
+          print("All required jobs passed.")
+          PY

@@ -3,16 +3,24 @@ name: Push to HuggingFace Space
 on:
   push:
     branches: [main]
+    paths:
+      - ".github/workflows/hf-space.yml"
+      - "Dockerfile"
+      - "README.md"
+      - "requirements.txt"
+      - "dev-requirements.txt"
+      - "geospatial-data-converter/**"
   workflow_dispatch:
 
 jobs:
   push-to-huggingface:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-        token: ${{ secrets.WORKFLOW_GIT_ACCESS_TOKEN }}
 
     - name: Push to HuggingFace Space
       env:

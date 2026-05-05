@@ -16,6 +16,8 @@ tags: [geospatial, streamlit, docker]
 ![GitHub tag (with filter)](https://img.shields.io/github/v/tag/joshuasundance-swca/geospatial-data-converter)
 
 [![Push to Docker Hub](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/docker-hub.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/docker-hub.yml)
+[![CI](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/ci.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/ci.yml)
+[![Release Assets](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/release-assets.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/release-assets.yml)
 [![Docker Image Size (tag)](https://img.shields.io/docker/image-size/joshuasundance/geospatial-data-converter/latest)](https://hub.docker.com/r/joshuasundance/geospatial-data-converter)
 
 [![Push to HuggingFace Space](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/hf-space.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/hf-space.yml)
@@ -67,11 +69,11 @@ OpenFileGDB.
 Upload multiple files at once, convert them all with shared settings, and download a single ZIP
 
 # Deployment
-`geospatial-data-converter` is deployed as a [Docker image](https://hub.docker.com/r/<your-dockerhub-username>/geospatial-data-converter) based on the `python:3.14-slim-bookworm` image.
+`geospatial-data-converter` is deployed as a [Docker image](https://hub.docker.com/r/joshuasundance/geospatial-data-converter) based on the `python:3.14-slim-bookworm` image.
 
 ## With Docker (pull from Docker Hub)
 1. Run in terminal:
-`docker run -p 7860:7860 <your-dockerhub-username>/geospatial-data-converter:latest`
+`docker run -p 7860:7860 joshuasundance/geospatial-data-converter:latest`
 2. Open http://localhost:7860 in your browser
 
 ## Docker Compose (build locally)
@@ -81,6 +83,23 @@ Upload multiple files at once, convert them all with shared settings, and downlo
 
 ## Run Tests (with local Docker container)
 1. Run in terminal: `docker compose run --rm test`
+
+# Release workflow
+
+## Everyday validation
+1. Push to any branch or open a pull request to run the `CI` workflow.
+2. The CI workflow runs `pre-commit` across tracked files, executes `pytest`, builds wheel/sdist artifacts, runs `twine check`, and smoke-tests the Docker image.
+
+## Dry runs before release
+1. Run the `Release Assets` workflow with `dry_run=true` to build artifacts, validate metadata, and upload preview assets without creating a GitHub Release.
+2. Run the `Docker Image` workflow with `publish=false` to build and smoke-test the container without logging in to Docker Hub or pushing tags.
+3. Run the `Bump Version` workflow with `push_changes=false` to exercise the version-bump path, tests, and packaging checks without pushing the commit or tag.
+
+## Shipping a release
+1. Run `Bump Version` with the desired bump and `push_changes=true`.
+2. Push or create the matching git tag if you did not let the workflow push it.
+3. Let `Release Assets` create or update the draft GitHub Release with generated notes from GitHub and `.github/release.yml`.
+4. Let the Docker workflow publish `joshuasundance/geospatial-data-converter:x.y.z` and `latest`.
 
 # Links
 - [Streamlit](https://streamlit.io)

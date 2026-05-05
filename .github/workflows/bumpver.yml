@@ -12,6 +12,11 @@ on:
         - 'major'
         - 'minor'
         - 'patch'
+      push_changes:
+        type: boolean
+        description: 'Push the bump commit and tag after validation succeeds'
+        required: true
+        default: false
 
 jobs:
   bump-version:
@@ -20,21 +25,52 @@ jobs:
       contents: write
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         token: ${{ secrets.WORKFLOW_GIT_ACCESS_TOKEN }}
         fetch-depth: 0
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
-        python-version: 3.14
+        python-version: '3.11'
         cache: pip
     - name: Install Python libraries
       run: |
-        pip install --user bumpver
+        python -m pip install --upgrade pip
+        python -m pip install bumpver -r requirements.txt -r dev-requirements.txt
     - name: git config
       run: |
         git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
     - name: Bump version
-      run: bumpver update --commit --tag-commit --${{ github.event.inputs.bump }} --push
+      run: bumpver update --commit --tag-commit --no-push --${{ github.event.inputs.bump }}
+    - name: Capture bumped version
+      id: version
+      run: |
+        python - <<'PY'
+        import os
+        import pathlib
+        import tomllib
+
+        version = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+            fh.write(f"version={version}\n")
+        PY
+      shell: bash
+    - name: Run pre-commit on bumped files
+      run: |
+        pre-commit run --files pyproject.toml geospatial-data-converter/app.py CHANGELOG.md
+    - name: Run test suite
+      run: python -m pytest -q
+    - name: Build release artifacts
+      run: python -m build
+    - name: Validate release artifacts
+      run: python -m twine check --strict dist/*
+    - name: Push version commit and tag
+      if: github.event.inputs.push_changes == 'true'
+      run: |
+        git push origin HEAD
+        git push origin refs/tags/${{ steps.version.outputs.version }}
+    - name: Report dry run completion
+      if: github.event.inputs.push_changes != 'true'
+      run: echo "Validated bump for ${{ steps.version.outputs.version }} without pushing commit or tag."
