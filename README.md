@@ -78,17 +78,17 @@ Upload multiple files at once, convert them all with shared settings, and downlo
 
 ## Docker Compose (build locally)
 1. Clone the repo. Navigate to cloned repo directory
-2. Run in terminal: `docker compose up`
+2. Run in terminal: `docker compose up --build`
 3. Open http://localhost:7860 in your browser
 
 ## Run Tests (with local Docker container)
-1. Run in terminal: `docker compose run --rm test`
+1. Run in terminal: `docker compose -f docker-compose.test.yml run --rm --build test`
 
 # Release workflow
 
 ## Everyday validation
 1. Push to any branch or open a pull request to run the `CI` workflow.
-2. The CI workflow runs `pre-commit` across tracked files, executes `pytest`, builds wheel/sdist artifacts, runs `twine check`, and smoke-tests the Docker image.
+2. The CI workflow runs `pre-commit` across tracked files, executes `pytest` on Python 3.14, builds wheel/sdist artifacts, runs `twine check`, and smoke-tests the Docker image for non-root execution, OCI labels, installability, and Streamlit health.
 
 ## Dry runs before release
 1. Run the `Release Assets` workflow with `dry_run=true` to build artifacts, validate metadata, and upload preview assets without creating a GitHub Release.

@@ -10,7 +10,7 @@ async def get_arcgis_data(
     *,
     session_factory: Callable[[], Any] | None = None,
     feature_layer_cls: Any = None,
-) -> tuple[str, "gpd.GeoDataFrame"]:
+) -> tuple[str, gpd.GeoDataFrame]:
     if session_factory is None:
         from aiohttp import ClientSession
 

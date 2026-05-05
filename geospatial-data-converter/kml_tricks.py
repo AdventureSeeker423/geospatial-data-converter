@@ -230,7 +230,7 @@ def extract_kml_code_from_file(file_path: str) -> str:
     file_extension = file_path.lower().split(".")[-1]
 
     if file_extension == "kml":
-        with open(file_path, "r") as kml_file:
+        with open(file_path) as kml_file:
             kml_code = kml_file.read()
     elif file_extension == "kmz":
         with zipfile.ZipFile(file_path) as kmz_file:

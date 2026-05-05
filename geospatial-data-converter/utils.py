@@ -104,7 +104,7 @@ def _resolve_esri_crs(spatial_reference: dict[str, object]) -> CRS | None:
     for candidate in candidates:
         try:
             return CRS.from_user_input(candidate)
-        except (CRSError, TypeError, ValueError):
+        except CRSError, TypeError, ValueError:
             continue
     return None
 
@@ -506,7 +506,7 @@ def read_file(file: BinaryIO, *args, **kwargs) -> gpd.GeoDataFrame:
         data = file.read()
         try:
             parsed = json.loads(data)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             parsed = None
         if isinstance(parsed, dict) and (
             "features" in parsed

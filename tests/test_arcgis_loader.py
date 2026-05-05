@@ -7,7 +7,7 @@ class FakeSession:
     def __init__(self, tracker: dict[str, object]) -> None:
         self.tracker = tracker
 
-    async def __aenter__(self) -> "FakeSession":
+    async def __aenter__(self) -> FakeSession:
         self.tracker["entered"] = True
         self.tracker["session"] = self
         return self

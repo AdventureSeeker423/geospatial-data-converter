@@ -7,7 +7,7 @@ name = "geospatial-data-converter"
 version = "1.2.0"
 description = "Streamlit app for converting geospatial datasets between common formats."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = "MIT"
 authors = [
     { name = "Joshua Bailey" },
@@ -33,11 +33,23 @@ Changelog = "https://github.com/joshuasundance-swca/geospatial-data-converter/bl
 [project.optional-dependencies]
 dev = [
     "build>=1.2.2",
+    "bumpver>=2024.1130",
     "pre-commit>=4.3.0",
     "pytest==9.0.3",
     "pytest-cov==7.1.0",
     "twine>=6.1.0",
 ]
+
+[tool.black]
+line-length = 88
+target-version = ["py314"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+ignore = ["E501"]
 
 [tool.setuptools]
 package-dir = { "" = "geospatial-data-converter" }
@@ -47,6 +59,9 @@ py-modules = ["app", "arcgis_loader", "kml_tricks", "utils"]
 pythonpath = ["geospatial-data-converter"]
 testpaths = ["tests"]
 addopts = "--cov=geospatial-data-converter"
+
+[tool.bandit]
+exclude_dirs = ["tests"]
 
 [tool.bumpver]
 current_version = "1.2.0"
