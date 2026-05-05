@@ -93,14 +93,13 @@ Upload multiple files at once, convert them all with shared settings, and downlo
 ## Dry runs before release
 1. Run the `Release Assets` workflow with `dry_run=true` to build artifacts, validate metadata, and upload preview assets without creating a GitHub Release.
 2. Run the `Docker Image` workflow with `publish=false` to build and smoke-test the container without logging in to Docker Hub or pushing tags.
-3. Run the `Bump Version` workflow with `push_changes=false` to exercise the version-bump path, tests, changelog gate, and packaging checks without pushing the commit or tag.
+3. Run the `Bump Version` workflow with `push_changes=false` to exercise the version-bump path, tests, and packaging checks without pushing the commit or tag.
 
 ## Shipping a release
-1. Add a new `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md`.
-2. Run `Bump Version` with the desired bump and `push_changes=true`.
-3. Push or create the matching git tag if you did not let the workflow push it.
-4. Let `Release Assets` create or update the draft GitHub Release with generated notes.
-5. Let the Docker workflow publish `joshuasundance/geospatial-data-converter:x.y.z` and `latest`.
+1. Run `Bump Version` with the desired bump and `push_changes=true`.
+2. Push or create the matching git tag if you did not let the workflow push it.
+3. Let `Release Assets` create or update the draft GitHub Release with generated notes from GitHub and `.github/release.yml`.
+4. Let the Docker workflow publish `joshuasundance/geospatial-data-converter:x.y.z` and `latest`.
 
 # Links
 - [Streamlit](https://streamlit.io)

@@ -57,8 +57,6 @@ jobs:
             fh.write(f"version={version}\n")
         PY
       shell: bash
-    - name: Require changelog entry
-      run: grep -F "## [${{ steps.version.outputs.version }}]" CHANGELOG.md
     - name: Run pre-commit on bumped files
       run: |
         pre-commit run --files pyproject.toml geospatial-data-converter/app.py CHANGELOG.md

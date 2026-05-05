@@ -105,13 +105,6 @@ jobs:
               fh.write(f"publish_release={publish_release}\n")
           PY
 
-      - name: Require changelog entry for publish
-        if: steps.meta.outputs.publish_release == 'true'
-        env:
-          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
-        run: |
-          grep -F "## [${RELEASE_TAG}]" CHANGELOG.md
-
       - name: Build distributions
         run: python -m build
 
