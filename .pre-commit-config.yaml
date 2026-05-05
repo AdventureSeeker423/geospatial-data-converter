@@ -1,63 +1,91 @@
-# Don't know what this file is? See https://pre-commit.com/
-#   pip install pre-commit
-#   pre-commit install
-#   pre-commit autoupdate
-# Apply to all files without commiting:
-#   pre-commit run --all-files
-#   I recommend running this until you pass all checks, and then commit.
-#   Fix what you need to and then let the pre-commit hooks resolve their conflicts.
-#   You may need to git add -u between runs.
-exclude: "AI_CHANGELOG.md"
+minimum_pre_commit_version: "3.7.0"
+default_install_hook_types: [pre-commit, pre-push]
+exclude: ^AI_CHANGELOG\.md$
 repos:
--   repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.15.12"
-    hooks:
-    -   id: ruff
-        args: [--fix, --exit-non-zero-on-fix, --ignore, E501]
--   repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.11.0
-    hooks:
-    -   id: shellcheck
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-    -   id: check-ast
-    -   id: check-builtin-literals
-    -   id: check-merge-conflict
-    -   id: check-symlinks
-    -   id: check-toml
-    -   id: check-xml
-    -   id: debug-statements
-    -   id: check-case-conflict
-    -   id: check-docstring-first
-    -   id: check-executables-have-shebangs
-    -   id: check-json
-#    -   id: check-yaml
-    -   id: debug-statements
     -   id: fix-byte-order-marker
-    -   id: detect-private-key
+    -   id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: \.bat$
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
-    -   id: mixed-line-ending
-    -   id: requirements-txt-fixer
--   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.20.2
+        args: [--markdown-linebreak-ext=md]
+    -   id: check-added-large-files
+        args: [--maxkb=10240]
+    -   id: check-case-conflict
+    -   id: check-merge-conflict
+    -   id: check-symlinks
+    -   id: detect-private-key
+    -   id: check-json
+    -   id: check-toml
+    -   id: check-yaml
+        args: [--allow-multiple-documents]
+    -   id: check-xml
+    -   id: check-ast
+    -   id: check-builtin-literals
+    -   id: check-docstring-first
+    -   id: debug-statements
+    -   id: check-executables-have-shebangs
+-   repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
     hooks:
-    -   id: mypy
--   repo: https://github.com/asottile/add-trailing-comma
-    rev: v4.0.0
+    -   id: gitleaks
+-   repo: https://github.com/asottile/pyupgrade
+    rev: v3.21.2
     hooks:
-    -   id: add-trailing-comma
-# -   repo: https://github.com/dannysepler/rm_unneeded_f_str
-#     rev: v0.2.0
-#     hooks:
-#     -   id: rm-unneeded-f-str
+    -   id: pyupgrade
+        args: [--py314-plus]
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+    -   id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
 -   repo: https://github.com/psf/black
     rev: 26.3.1
     hooks:
     -   id: black
+        args: [--fast]
+-   repo: https://github.com/abravalheri/validate-pyproject
+    rev: v0.25
+    hooks:
+    -   id: validate-pyproject
+        files: ^pyproject\.toml$
+        additional_dependencies:
+        -   validate-pyproject-schema-store[all]
+-   repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.1
+    hooks:
+    -   id: check-compose-spec
+    -   id: check-github-workflows
+        files: ^\.github/workflows/.*\.(yml|yaml)$
+    -   id: check-dependabot
+        files: ^\.github/dependabot\.ya?ml$
+-   repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+    -   id: actionlint
+        files: ^\.github/workflows/.*\.(yml|yaml)$
 -   repo: https://github.com/PyCQA/bandit
     rev: 1.9.4
     hooks:
     -   id: bandit
-        args: ["-x", "tests/*.py"]
+        args: [-c, pyproject.toml]
+        stages: [manual]
+-   repo: local
+    hooks:
+    -   id: pytest
+        name: python -m pytest -q
+        entry: python -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+    -   id: build-distributions
+        name: python -m build
+        entry: python -m build
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]

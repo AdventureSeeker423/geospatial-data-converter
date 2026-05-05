@@ -6,26 +6,28 @@ on:
       - "**"
     paths:
       - ".github/workflows/**"
+      - ".pre-commit-config.yaml"
+      - ".dockerignore"
       - "geospatial-data-converter/**"
       - "tests/**"
       - "Dockerfile"
       - "docker-compose.yml"
+      - "docker-compose.test.yml"
       - "pyproject.toml"
-      - "requirements.txt"
-      - "dev-requirements.txt"
       - "README.md"
   pull_request:
     branches:
       - main
     paths:
       - ".github/workflows/**"
+      - ".pre-commit-config.yaml"
+      - ".dockerignore"
       - "geospatial-data-converter/**"
       - "tests/**"
       - "Dockerfile"
       - "docker-compose.yml"
+      - "docker-compose.test.yml"
       - "pyproject.toml"
-      - "requirements.txt"
-      - "dev-requirements.txt"
       - "README.md"
 
 concurrency:
@@ -45,23 +47,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.14"
           cache: pip
 
       - name: Install lint dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt -r dev-requirements.txt
+          python -m pip install ".[dev]"
 
       - name: Run pre-commit on tracked files
         run: pre-commit run --all-files --show-diff-on-failure
 
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.14"]
     steps:
       - name: Check out code
         uses: actions/checkout@v6
@@ -69,13 +67,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.14"
           cache: pip
 
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt -r dev-requirements.txt
+          python -m pip install ".[dev]"
 
       - name: Run test suite
         run: python -m pytest -q
@@ -89,13 +87,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.14"
           cache: pip
 
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt -r dev-requirements.txt
+          python -m pip install ".[dev]"
 
       - name: Build release artifacts
         run: python -m build
@@ -110,11 +108,52 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Build runtime image
-        run: docker build --target runtime -t geospatial-data-converter:ci .
+        run: |
+          VERSION=$(python - <<'PY'
+          import pathlib
+          import tomllib
+
+          print(tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])
+          PY
+          )
+          docker build \
+            --target runtime \
+            --build-arg VERSION="$VERSION" \
+            --build-arg VCS_REF="${GITHUB_SHA}" \
+            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t geospatial-data-converter:ci .
 
       - name: Smoke test runtime image
         run: |
-          docker run --rm geospatial-data-converter:ci python -c "import sys; sys.path.insert(0, '/home/appuser/geospatial-data-converter'); import app; print(app.__version__)"
+          VERSION=$(python - <<'PY'
+          import pathlib
+          import tomllib
+
+          print(tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])
+          PY
+          )
+          test "$(docker inspect --format '{{.Config.User}}' geospatial-data-converter:ci)" = "appuser"
+          test "$(docker inspect --format '{{ index .Config.Labels \"org.opencontainers.image.version\" }}' geospatial-data-converter:ci)" = "$VERSION"
+          docker run --rm --entrypoint python geospatial-data-converter:ci -c "import importlib.metadata; print(importlib.metadata.version('geospatial-data-converter'))"
+          docker run -d --rm --name geospatial-data-converter-smoke -p 7860:7860 geospatial-data-converter:ci
+          python - <<'PY'
+          import time
+          import urllib.request
+
+          last_error = None
+          for _ in range(30):
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:7860/_stcore/health", timeout=5) as response:
+                      body = response.read().decode("utf-8").strip()
+                  if body == "ok":
+                      break
+              except Exception as exc:
+                  last_error = exc
+                  time.sleep(1)
+          else:
+              raise SystemExit(f"runtime health check failed: {last_error}")
+          PY
+          docker rm -f geospatial-data-converter-smoke
 
   ci:
     runs-on: ubuntu-latest

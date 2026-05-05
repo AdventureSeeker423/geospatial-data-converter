@@ -401,7 +401,7 @@ elif len(datasets) == 1:
                 "Geometry types: "
                 + ", ".join(f"{t} ({n:,})" for t, n in geom_types.items()),
             )
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         pass
 
     st.divider()

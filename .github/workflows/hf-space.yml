@@ -7,8 +7,7 @@ on:
       - ".github/workflows/hf-space.yml"
       - "Dockerfile"
       - "README.md"
-      - "requirements.txt"
-      - "dev-requirements.txt"
+      - "pyproject.toml"
       - "geospatial-data-converter/**"
   workflow_dispatch:
 
@@ -26,4 +25,4 @@ jobs:
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
-        git push https://joshuasundance:$HF_TOKEN@huggingface.co/spaces/joshuasundance/geospatial-data-converter main
+        git push "https://joshuasundance:${HF_TOKEN}@huggingface.co/spaces/joshuasundance/geospatial-data-converter" main

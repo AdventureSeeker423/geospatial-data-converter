@@ -5,11 +5,11 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/docker-hub.yml"
+      - ".dockerignore"
       - "Dockerfile"
       - "docker-compose.yml"
+      - "docker-compose.test.yml"
       - "pyproject.toml"
-      - "requirements.txt"
-      - "dev-requirements.txt"
       - "geospatial-data-converter/**"
   push:
     branches: [main]
@@ -17,11 +17,11 @@ on:
       - '*.*.*'
     paths:
       - ".github/workflows/docker-hub.yml"
+      - ".dockerignore"
       - "Dockerfile"
       - "docker-compose.yml"
+      - "docker-compose.test.yml"
       - "pyproject.toml"
-      - "requirements.txt"
-      - "dev-requirements.txt"
       - "geospatial-data-converter/**"
   workflow_dispatch:
     inputs:
@@ -42,6 +42,7 @@ jobs:
       contents: read
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
+      project_version: ${{ steps.meta.outputs.project_version }}
       publish_image: ${{ steps.meta.outputs.publish_image }}
       publish_latest: ${{ steps.meta.outputs.publish_latest }}
     steps:
@@ -90,6 +91,7 @@ jobs:
                 image_tag = input_image_tag or f"dry-run-{version}"
 
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+            fh.write(f"project_version={version}\n")
             fh.write(f"image_tag={image_tag}\n")
             fh.write(f"publish_image={publish_image}\n")
             fh.write(f"publish_latest={publish_latest}\n")
@@ -105,11 +107,36 @@ jobs:
         target: runtime
         load: true
         push: false
+        build-args: |
+          VERSION=${{ steps.meta.outputs.project_version }}
+          VCS_REF=${{ github.sha }}
+          BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_id }}
         tags: joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }}
 
     - name: Smoke test runtime image
       run: |
-        docker run --rm joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }} python -c "import sys; sys.path.insert(0, '/home/appuser/geospatial-data-converter'); import app; print(app.__version__)"
+        test "$(docker inspect --format '{{.Config.User}}' joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }})" = "appuser"
+        test "$(docker inspect --format '{{ index .Config.Labels \"org.opencontainers.image.version\" }}' joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }})" = "${{ steps.meta.outputs.project_version }}"
+        docker run --rm --entrypoint python joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }} -c "import importlib.metadata; print(importlib.metadata.version('geospatial-data-converter'))"
+        docker run -d --rm --name geospatial-data-converter-release-smoke -p 7860:7860 joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }}
+        python - <<'PY'
+        import time
+        import urllib.request
+
+        last_error = None
+        for _ in range(30):
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:7860/_stcore/health", timeout=5) as response:
+                    body = response.read().decode("utf-8").strip()
+                if body == "ok":
+                    break
+            except Exception as exc:
+                last_error = exc
+                time.sleep(1)
+        else:
+            raise SystemExit(f"runtime health check failed: {last_error}")
+        PY
+        docker rm -f geospatial-data-converter-release-smoke
 
   publish-image:
     runs-on: ubuntu-latest
@@ -137,6 +164,10 @@ jobs:
         context: .
         target: runtime
         push: true
+        build-args: |
+          VERSION=${{ needs.verify-image.outputs.project_version }}
+          VCS_REF=${{ github.sha }}
+          BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_id }}
         tags: |
           joshuasundance/geospatial-data-converter:${{ needs.verify-image.outputs.image_tag }}
           ${{ needs.verify-image.outputs.publish_latest == 'true' && 'joshuasundance/geospatial-data-converter:latest' || '' }}
