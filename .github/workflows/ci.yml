@@ -133,7 +133,7 @@ jobs:
           PY
           )
           test "$(docker inspect --format '{{.Config.User}}' geospatial-data-converter:ci)" = "appuser"
-          test "$(docker inspect --format '{{ index .Config.Labels \"org.opencontainers.image.version\" }}' geospatial-data-converter:ci)" = "$VERSION"
+          test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' geospatial-data-converter:ci)" = "$VERSION"
           docker run --rm --entrypoint python geospatial-data-converter:ci -c "import importlib.metadata; print(importlib.metadata.version('geospatial-data-converter'))"
           docker run -d --rm --name geospatial-data-converter-smoke -p 7860:7860 geospatial-data-converter:ci
           python - <<'PY'

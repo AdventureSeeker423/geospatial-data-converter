@@ -116,7 +116,7 @@ jobs:
     - name: Smoke test runtime image
       run: |
         test "$(docker inspect --format '{{.Config.User}}' joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }})" = "appuser"
-        test "$(docker inspect --format '{{ index .Config.Labels \"org.opencontainers.image.version\" }}' joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }})" = "${{ steps.meta.outputs.project_version }}"
+        test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }})" = "${{ steps.meta.outputs.project_version }}"
         docker run --rm --entrypoint python joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }} -c "import importlib.metadata; print(importlib.metadata.version('geospatial-data-converter'))"
         docker run -d --rm --name geospatial-data-converter-release-smoke -p 7860:7860 joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }}
         python - <<'PY'
