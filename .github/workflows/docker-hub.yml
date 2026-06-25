@@ -76,7 +76,11 @@ jobs:
         publish_image = "false"
         publish_latest = "false"
 
-        if event_name == "push" and ref_name != "main":
+        if event_name == "push" and ref_name == "main":
+            image_tag = version
+            publish_image = "true"
+            publish_latest = "true"
+        elif event_name == "push" and ref_name != "main":
             if ref_name != version:
                 raise SystemExit(f"Tag {ref_name!r} does not match project version {version!r}")
             image_tag = ref_name

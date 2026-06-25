@@ -1,14 +1,13 @@
+# Portainer / remote stack deploy: builds from your GitHub repo (no GHCR pull required).
 services:
   geospatial-data-converter:
-    image: ghcr.io/adventureseeker423/geospatial-data-converter:latest
-    pull_policy: build
     build:
-      context: .
+      context: https://github.com/AdventureSeeker423/geospatial-data-converter.git#main
       dockerfile: Dockerfile
       target: runtime
     container_name: geospatial-data-converter
     ports:
-      - "${APP_PORT:-7860}:7860"
+      - "7860:7860"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=5).read()"]
