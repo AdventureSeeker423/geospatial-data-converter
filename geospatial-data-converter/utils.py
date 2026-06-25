@@ -547,6 +547,13 @@ def zip_dir(directory: str) -> bytes:
     return zip_buffer.getvalue()
 
 
+def _jpeg_quality_from_compression(jpeg_compression: int) -> int:
+    """Map UI compression percent to GDAL JPEG_QUALITY."""
+    if jpeg_compression < 1 or jpeg_compression > 100:
+        raise ValueError("JPEG compression must be between 1 and 100.")
+    return max(1, 100 - jpeg_compression)
+
+
 def convert(
     gdf: gpd.GeoDataFrame | None,
     output_name: str,
@@ -554,7 +561,7 @@ def convert(
     *,
     kmz_overlay: bytes | None = None,
     dst_srs: str | None = None,
-    jpeg_quality: int = 50,
+    jpeg_compression: int = 50,
 ) -> bytes:
     """Convert a GeoDataFrame or KMZ GroundOverlay to the specified format."""
     if output_format == "GeoTIFF":
@@ -569,7 +576,7 @@ def convert(
                 io.BytesIO(kmz_overlay),
                 out_path,
                 dst_srs=dst_srs or "EPSG:4326",
-                jpeg_quality=jpeg_quality,
+                jpeg_quality=_jpeg_quality_from_compression(jpeg_compression),
             )
             with open(out_path, "rb") as geotiff_file:
                 return geotiff_file.read()

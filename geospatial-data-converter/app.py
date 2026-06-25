@@ -58,7 +58,7 @@ CRS_PRESETS = {
     "Custom EPSG…": "custom",
 }
 
-GEOTIFF_JPEG_QUALITY_OPTIONS = list(range(10, 101, 10))
+GEOTIFF_JPEG_COMPRESSION_OPTIONS = list(range(10, 101, 10))
 
 
 def st_init_null(*variable_names) -> None:
@@ -184,7 +184,7 @@ def _convert_dataset(
             output_format=output_format,
             kmz_overlay=ds.get("kmz_overlay"),
             dst_srs=_crs_to_srs(target_crs),
-            jpeg_quality=choices["jpeg_quality"],
+            jpeg_compression=choices["jpeg_compression"],
         )
 
     gdf = ds["gdf"]
@@ -230,7 +230,7 @@ def _render_convert_controls(
             "custom_epsg": "",
             "fix_invalid": False,
             "selected_cols": None,
-            "jpeg_quality": 50,
+            "jpeg_compression": 50,
         }
 
     reference = datasets[0]
@@ -242,16 +242,17 @@ def _render_convert_controls(
     )
     st.caption(OUTPUT_FORMAT_HELP.get(output_format, ""))
 
-    jpeg_quality = 50
+    jpeg_compression = 50
     if output_format == "GeoTIFF":
-        jpeg_quality = st.selectbox(
-            "JPEG compression quality",
-            GEOTIFF_JPEG_QUALITY_OPTIONS,
-            index=GEOTIFF_JPEG_QUALITY_OPTIONS.index(50),
-            key=f"{key_prefix}_jpeg_quality",
+        jpeg_compression = st.selectbox(
+            "JPEG compression (%)",
+            GEOTIFF_JPEG_COMPRESSION_OPTIONS,
+            index=GEOTIFF_JPEG_COMPRESSION_OPTIONS.index(50),
+            format_func=lambda value: f"{value}%",
+            key=f"{key_prefix}_jpeg_compression",
             help=(
-                "Higher values preserve more image detail but produce larger "
-                "GeoTIFF files. Default is 50."
+                "Higher compression produces smaller GeoTIFF files with more "
+                "visible artifacting. Default is 50%."
             ),
         )
 
@@ -295,7 +296,7 @@ def _render_convert_controls(
         "custom_epsg": custom_epsg,
         "fix_invalid": fix_invalid,
         "selected_cols": selected_cols,
-        "jpeg_quality": jpeg_quality,
+        "jpeg_compression": jpeg_compression,
     }
 
 
