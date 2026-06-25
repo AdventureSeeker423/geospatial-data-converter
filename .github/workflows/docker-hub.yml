@@ -1,4 +1,4 @@
-name: Docker Image
+name: Container Image
 
 on:
   pull_request:
@@ -30,10 +30,13 @@ on:
         required: false
         type: string
       publish:
-        description: 'Push the image to Docker Hub'
+        description: 'Push the image to GitHub Container Registry'
         required: true
         default: false
         type: boolean
+
+env:
+  IMAGE_NAME: ghcr.io/adventureseeker423/geospatial-data-converter
 
 jobs:
   verify-image:
@@ -111,14 +114,17 @@ jobs:
           VERSION=${{ steps.meta.outputs.project_version }}
           VCS_REF=${{ github.sha }}
           BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_id }}
-        tags: joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }}
+        tags: ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.image_tag }}
 
     - name: Smoke test runtime image
+      env:
+        IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+        PROJECT_VERSION: ${{ steps.meta.outputs.project_version }}
       run: |
-        test "$(docker inspect --format '{{.Config.User}}' joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }})" = "appuser"
-        test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }})" = "${{ steps.meta.outputs.project_version }}"
-        docker run --rm --entrypoint python joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }} -c "import importlib.metadata; print(importlib.metadata.version('geospatial-data-converter'))"
-        docker run -d --rm --name geospatial-data-converter-release-smoke -p 7860:7860 joshuasundance/geospatial-data-converter:${{ steps.meta.outputs.image_tag }}
+        test "$(docker inspect --format '{{.Config.User}}' "$IMAGE_NAME:$IMAGE_TAG")" = "appuser"
+        test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$IMAGE_NAME:$IMAGE_TAG")" = "$PROJECT_VERSION"
+        docker run --rm --entrypoint python "$IMAGE_NAME:$IMAGE_TAG" -c "import importlib.metadata; print(importlib.metadata.version('geospatial-data-converter'))"
+        docker run -d --rm --name geospatial-data-converter-release-smoke -p 7860:7860 "$IMAGE_NAME:$IMAGE_TAG"
         python - <<'PY'
         import time
         import urllib.request
@@ -144,6 +150,7 @@ jobs:
     if: needs.verify-image.outputs.publish_image == 'true'
     permissions:
       contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v6
       with:
@@ -152,11 +159,12 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v4
 
-    - name: Log in to Docker Hub
+    - name: Log in to GitHub Container Registry
       uses: docker/login-action@v4
       with:
-        username: joshuasundance
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build and push release image
       uses: docker/build-push-action@v7
@@ -169,5 +177,5 @@ jobs:
           VCS_REF=${{ github.sha }}
           BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_id }}
         tags: |
-          joshuasundance/geospatial-data-converter:${{ needs.verify-image.outputs.image_tag }}
-          ${{ needs.verify-image.outputs.publish_latest == 'true' && 'joshuasundance/geospatial-data-converter:latest' || '' }}
+          ${{ env.IMAGE_NAME }}:${{ needs.verify-image.outputs.image_tag }}
+          ${{ needs.verify-image.outputs.publish_latest == 'true' && format('{0}:latest', env.IMAGE_NAME) || '' }}

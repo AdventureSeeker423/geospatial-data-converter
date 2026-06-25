@@ -25,4 +25,4 @@ jobs:
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
-        git push "https://joshuasundance:${HF_TOKEN}@huggingface.co/spaces/joshuasundance/geospatial-data-converter" main
+        git push "https://AdventureSeeker423:${HF_TOKEN}@huggingface.co/spaces/AdventureSeeker423/geospatial-data-converter" main

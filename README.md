@@ -13,19 +13,14 @@ tags: [geospatial, streamlit, docker]
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![python](https://img.shields.io/badge/Python-3.14-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
-![GitHub tag (with filter)](https://img.shields.io/github/v/tag/joshuasundance-swca/geospatial-data-converter)
+![GitHub tag (with filter)](https://img.shields.io/github/v/tag/AdventureSeeker423/geospatial-data-converter)
 
-[![Push to Docker Hub](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/docker-hub.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/docker-hub.yml)
-[![CI](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/ci.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/ci.yml)
-[![Release Assets](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/release-assets.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/release-assets.yml)
-[![Docker Image Size (tag)](https://img.shields.io/docker/image-size/joshuasundance/geospatial-data-converter/latest)](https://hub.docker.com/r/joshuasundance/geospatial-data-converter)
+[![Container Image](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/docker-hub.yml/badge.svg)](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/docker-hub.yml)
+[![CI](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/ci.yml/badge.svg)](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/ci.yml)
+[![Release Assets](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/release-assets.yml/badge.svg)](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/release-assets.yml)
 
-[![Push to HuggingFace Space](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/hf-space.yml/badge.svg)](https://github.com/joshuasundance-swca/geospatial-data-converter/actions/workflows/hf-space.yml)
-[![Open HuggingFace Space](https://huggingface.co/datasets/huggingface/badges/raw/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/joshuasundance/geospatial-data-converter)
-
-![Code Climate maintainability](https://img.shields.io/codeclimate/maintainability/joshuasundance-swca/geospatial-data-converter)
-![Code Climate issues](https://img.shields.io/codeclimate/issues/joshuasundance-swca/geospatial-data-converter)
-![Code Climate technical debt](https://img.shields.io/codeclimate/tech-debt/joshuasundance-swca/geospatial-data-converter)
+[![Push to HuggingFace Space](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/hf-space.yml/badge.svg)](https://github.com/AdventureSeeker423/geospatial-data-converter/actions/workflows/hf-space.yml)
+[![Open HuggingFace Space](https://huggingface.co/datasets/huggingface/badges/raw/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/AdventureSeeker423/geospatial-data-converter)
 
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v1.json)](https://github.com/charliermarsh/ruff)
@@ -33,7 +28,6 @@ tags: [geospatial, streamlit, docker]
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 [![security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
-![Known Vulnerabilities](https://snyk.io/test/github/joshuasundance-swca/geospatial-data-converter/badge.svg)
 
 This project showcases a simple geospatial data converter using [Streamlit](https://streamlit.io) and [GeoPandas](https://geopandas.org/).
 
@@ -69,15 +63,15 @@ OpenFileGDB.
 Upload multiple files at once, convert them all with shared settings, and download a single ZIP
 
 # Deployment
-`geospatial-data-converter` is deployed as a [Docker image](https://hub.docker.com/r/joshuasundance/geospatial-data-converter) based on the `python:3.14-slim-bookworm` image.
+`geospatial-data-converter` is deployed as a [GitHub Container Registry image](https://github.com/AdventureSeeker423/geospatial-data-converter/pkgs/container/geospatial-data-converter) based on the `python:3.14-slim-bookworm` image.
 
-## With Docker (pull from Docker Hub)
+## With Docker (pull from GitHub Container Registry)
 1. Run in terminal:
-`docker run -p 7860:7860 joshuasundance/geospatial-data-converter:latest`
+`docker run -p 7860:7860 ghcr.io/adventureseeker423/geospatial-data-converter:latest`
 2. Open http://localhost:7860 in your browser
 
-## Docker Compose (build locally)
-1. Clone the repo. Navigate to cloned repo directory
+## Docker Compose (build locally or pull published image)
+1. Clone [the repo](https://github.com/AdventureSeeker423/geospatial-data-converter). Navigate to cloned repo directory
 2. Run in terminal: `docker compose up --build`
 3. Open http://localhost:7860 in your browser
 
@@ -92,16 +86,16 @@ Upload multiple files at once, convert them all with shared settings, and downlo
 
 ## Dry runs before release
 1. Run the `Release Assets` workflow with `dry_run=true` to build artifacts, validate metadata, and upload preview assets without creating a GitHub Release.
-2. Run the `Docker Image` workflow with `publish=false` to build and smoke-test the container without logging in to Docker Hub or pushing tags.
+2. Run the `Container Image` workflow with `publish=false` to build and smoke-test the container without pushing tags.
 3. Run the `Bump Version` workflow with `push_changes=false` to exercise the version-bump path, tests, and packaging checks without pushing the commit or tag.
 
 ## Shipping a release
 1. Run `Bump Version` with the desired bump and `push_changes=true`.
 2. Push or create the matching git tag if you did not let the workflow push it.
 3. Let `Release Assets` create or update the draft GitHub Release with generated notes from GitHub and `.github/release.yml`.
-4. Let the Docker workflow publish `joshuasundance/geospatial-data-converter:x.y.z` and `latest`.
+4. Let the `Container Image` workflow publish `ghcr.io/adventureseeker423/geospatial-data-converter:x.y.z` and `latest`.
 
 # Links
 - [Streamlit](https://streamlit.io)
 - [GeoPandas](https://geopandas.org/)
-- [Docker Hub](https://hub.docker.com/)
+- [GitHub Container Registry](https://docs.github.com/packages/working-with-a-github-packages-registry/working-with-the-container-registry)

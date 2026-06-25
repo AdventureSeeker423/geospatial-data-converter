@@ -26,9 +26,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/joshuasundance-swca/geospatial-data-converter"
-Issues = "https://github.com/joshuasundance-swca/geospatial-data-converter/issues"
-Changelog = "https://github.com/joshuasundance-swca/geospatial-data-converter/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/AdventureSeeker423/geospatial-data-converter"
+Issues = "https://github.com/AdventureSeeker423/geospatial-data-converter/issues"
+Changelog = "https://github.com/AdventureSeeker423/geospatial-data-converter/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

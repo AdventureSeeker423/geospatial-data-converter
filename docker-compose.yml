@@ -1,11 +1,14 @@
 services:
   geospatial-data-converter:
+    image: ghcr.io/adventureseeker423/geospatial-data-converter:latest
     build:
       context: .
       dockerfile: Dockerfile
       target: runtime
+    container_name: geospatial-data-converter
     ports:
-      - "127.0.0.1:${APP_PORT:-7860}:7860"
+      - "${APP_PORT:-7860}:7860"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=5).read()"]
       interval: 30s
