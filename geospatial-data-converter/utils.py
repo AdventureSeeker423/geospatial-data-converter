@@ -26,6 +26,7 @@ from shapely.geometry.polygon import orient
 from tempfile import TemporaryDirectory
 from typing import BinaryIO
 from kml_tricks import load_ge_data
+from geotiff_tricks import convert_kmz_ground_overlay_to_geotiff
 
 output_format_dict = {
     "CSV": ("csv", "csv", "text/csv"),
@@ -35,6 +36,7 @@ output_format_dict = {
     "WKT": ("wkt", "wkt", "text/plain"),
     "EsriJSON": ("json", "json", "application/json"),
     "GPX": ("gpx", "gpx", "application/gpx+xml"),
+    "GeoTIFF": ("tif", "tif", "image/tiff"),
     "ESRI Shapefile": ("shp", "zip", "application/zip"),  # must be zipped
     "OpenFileGDB": ("gdb", "zip", "application/zip"),  # must be zipped
 }
@@ -545,8 +547,34 @@ def zip_dir(directory: str) -> bytes:
     return zip_buffer.getvalue()
 
 
-def convert(gdf: gpd.GeoDataFrame, output_name: str, output_format: str) -> bytes:
-    """Convert a GeoDataFrame to the specified format"""
+def convert(
+    gdf: gpd.GeoDataFrame | None,
+    output_name: str,
+    output_format: str,
+    *,
+    kmz_overlay: bytes | None = None,
+    dst_srs: str | None = None,
+) -> bytes:
+    """Convert a GeoDataFrame or KMZ GroundOverlay to the specified format."""
+    if output_format == "GeoTIFF":
+        if kmz_overlay is None:
+            raise ValueError(
+                "GeoTIFF export is supported for KMZ files that contain a "
+                "GroundOverlay image with gx:LatLonQuad georeferencing.",
+            )
+        with TemporaryDirectory() as tmpdir:
+            out_path = os.path.join(tmpdir, output_name)
+            convert_kmz_ground_overlay_to_geotiff(
+                io.BytesIO(kmz_overlay),
+                out_path,
+                dst_srs=dst_srs or "EPSG:4326",
+            )
+            with open(out_path, "rb") as geotiff_file:
+                return geotiff_file.read()
+
+    if gdf is None:
+        raise ValueError("No vector data is available for conversion.")
+
     with TemporaryDirectory() as tmpdir:
         out_path = os.path.join(tmpdir, output_name)
         if output_format == "CSV":

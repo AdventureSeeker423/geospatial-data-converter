@@ -12,6 +12,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /opt/app
 
+RUN apt-get update && apt-get install -y --no-install-recommends gdal-bin \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN python -m venv "$VIRTUAL_ENV"
 
 COPY README.md pyproject.toml ./
@@ -53,6 +56,8 @@ LABEL org.opencontainers.image.title="geospatial-data-converter" \
       org.opencontainers.image.created="$BUILD_DATE"
 
 RUN adduser --uid 1000 --disabled-password --gecos "" appuser && \
+    apt-get update && apt-get install -y --no-install-recommends gdal-bin && \
+    rm -rf /var/lib/apt/lists/* && \
     mkdir -p /workspace /opt/app /home/appuser/.streamlit && \
     chown -R appuser:appuser /workspace /opt/app /home/appuser
 

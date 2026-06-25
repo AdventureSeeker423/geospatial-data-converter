@@ -8,8 +8,10 @@ import zipfile
 import geopandas as gpd
 import pydeck as pdk
 import streamlit as st
+from shapely.geometry import Point
 
 from arcgis_loader import get_arcgis_data
+from geotiff_tricks import kmz_has_ground_overlay
 from utils import (
     auto_utm_epsg_for_gdf,
     convert,
@@ -37,6 +39,10 @@ OUTPUT_FORMAT_HELP = {
     "WKT": "One Well-Known Text geometry per line.",
     "EsriJSON": "Esri Feature JSON (FeatureSet) as consumed by ArcGIS Pro.",
     "GPX": "GPS Exchange Format (waypoints or tracks only).",
+    "GeoTIFF": (
+        "GeoTIFF raster for KMZ GroundOverlay images georeferenced with "
+        "gx:LatLonQuad (JPEG-compressed, tiled)."
+    ),
     "ESRI Shapefile": "Zipped shapefile (.shp, .shx, .dbf, .prj).",
     "OpenFileGDB": "Zipped File Geodatabase.",
 }
@@ -124,15 +130,51 @@ def _transform_gdf(
     return gdf
 
 
+def _dataset_kind(dataset: dict) -> str:
+    return dataset.get("kind", "vector")
+
+
+def _output_formats_for_datasets(datasets: list[dict]) -> list[str]:
+    has_overlay = any(_dataset_kind(ds) == "kmz_overlay" for ds in datasets)
+    has_vector = any(_dataset_kind(ds) == "vector" for ds in datasets)
+    if has_overlay and has_vector:
+        return []
+    if has_overlay:
+        return ["GeoTIFF"]
+    return [fmt for fmt in output_format_dict if fmt != "GeoTIFF"]
+
+
+def _crs_to_srs(target_crs) -> str:
+    if target_crs is None:
+        return "EPSG:4326"
+    return f"EPSG:{target_crs}"
+
+
 def _render_convert_controls(
-    gdf: gpd.GeoDataFrame,
+    datasets: list[dict],
     allow_columns: bool,
     key_prefix: str,
 ) -> dict:
     """Render the shared convert controls; return a dict of choices."""
+    available_formats = _output_formats_for_datasets(datasets)
+    if not available_formats:
+        st.warning(
+            "This batch mixes vector files with KMZ GroundOverlay images. "
+            "Convert those input types separately.",
+        )
+        return {
+            "output_format": None,
+            "crs_choice": list(CRS_PRESETS.keys())[0],
+            "custom_epsg": "",
+            "fix_invalid": False,
+            "selected_cols": None,
+        }
+
+    reference = datasets[0]
+    gdf = reference.get("gdf")
     output_format = st.selectbox(
         "Output format",
-        list(output_format_dict.keys()),
+        available_formats,
         key=f"{key_prefix}_output_format",
     )
     st.caption(OUTPUT_FORMAT_HELP.get(output_format, ""))
@@ -160,7 +202,7 @@ def _render_convert_controls(
     )
 
     selected_cols = None
-    if allow_columns:
+    if allow_columns and gdf is not None:
         attr_cols = [c for c in gdf.columns if c != gdf.geometry.name]
         if attr_cols:
             with st.expander(f"Columns ({len(attr_cols)} available)"):
@@ -325,7 +367,7 @@ if load_clicked:
             else:
                 with st.spinner("Fetching feature layer…"):
                     name, gdf = asyncio.run(get_arcgis_data(arcgis_url))
-                new_datasets.append({"name": name, "gdf": gdf})
+                new_datasets.append({"name": name, "kind": "vector", "gdf": gdf})
         elif source == "Paste WKT":
             if not wkt_text.strip():
                 st.session_state.load_error = (
@@ -337,7 +379,9 @@ if load_clicked:
                 if len(gdf) == 0:
                     st.session_state.load_error = "No valid WKT geometries were parsed."
                 else:
-                    new_datasets.append({"name": "wkt_input", "gdf": gdf})
+                    new_datasets.append(
+                        {"name": "wkt_input", "kind": "vector", "gdf": gdf},
+                    )
         else:  # Upload file(s)
             if not uploaded_files:
                 st.session_state.load_error = "Choose one or more files before loading."
@@ -347,8 +391,24 @@ if load_clicked:
                         name, _ = os.path.splitext(
                             os.path.basename(uf.name),
                         )
+                        raw = uf.getvalue()
+                        if uf.name.lower().endswith(".kmz") and kmz_has_ground_overlay(
+                            io.BytesIO(raw),
+                        ):
+                            new_datasets.append(
+                                {
+                                    "name": name,
+                                    "kind": "kmz_overlay",
+                                    "kmz_overlay": raw,
+                                },
+                            )
+                            continue
                         new_datasets.append(
-                            {"name": name, "gdf": read_file(uf)},
+                            {
+                                "name": name,
+                                "kind": "vector",
+                                "gdf": read_file(io.BytesIO(raw)),
+                            },
                         )
         if not st.session_state.load_error:
             st.session_state.datasets = new_datasets
@@ -373,7 +433,7 @@ if not datasets:
     )
     with st.expander("Supported input formats"):
         st.markdown(
-            "- **KML / KMZ** — Google Earth\n"
+            "- **KML / KMZ** — Google Earth (vector features or GroundOverlay images)\n"
             "- **GeoJSON** (.geojson) — RFC 7946\n"
             "- **Esri Feature JSON** (.json) — ArcGIS Pro / ArcGIS REST\n"
             "- **WKT** (.wkt file or pasted text) — one geometry per line\n"
@@ -384,100 +444,185 @@ if not datasets:
 elif len(datasets) == 1:
     # --- Single-dataset flow ---
     ds = datasets[0]
-    gdf = ds["gdf"]
     fn = ds["name"]
 
     st.subheader(fn or "Loaded dataset")
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Features", f"{len(gdf):,}")
-    c2.metric("Attributes", f"{max(gdf.shape[1] - 1, 0):,}")
-    c3.metric("CRS", str(gdf.crs) if gdf.crs else "unknown")
+    if _dataset_kind(ds) == "kmz_overlay":
+        c1, c2 = st.columns(2)
+        c1.metric("Input type", "KMZ GroundOverlay")
+        c2.metric("Output", "GeoTIFF")
+        st.caption(
+            "This KMZ contains a georeferenced image overlay. Export it as a "
+            "tiled GeoTIFF using the corner coordinates from gx:LatLonQuad.",
+        )
+        st.divider()
 
-    try:
-        geom_types = gdf.geometry.geom_type.value_counts()
-        if len(geom_types):
-            st.caption(
-                "Geometry types: "
-                + ", ".join(f"{t} ({n:,})" for t, n in geom_types.items()),
+        convert_col, _ = st.columns([1, 2])
+        with convert_col:
+            st.markdown("### Convert")
+            choices = _render_convert_controls(
+                datasets,
+                allow_columns=False,
+                key_prefix="single",
             )
-    except AttributeError, TypeError, ValueError:
-        pass
 
-    st.divider()
+            if st.button("Convert", type="primary", use_container_width=True):
+                if choices["output_format"] is None:
+                    st.error("Choose a compatible output format before converting.")
+                else:
+                    try:
+                        target_crs = _resolve_target_crs(
+                            choices["crs_choice"],
+                            choices["custom_epsg"],
+                            gpd.GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:4326"),
+                        )
+                        file_ext, dl_ext, mimetype = output_format_dict[
+                            choices["output_format"]
+                        ]
+                        output_fn = f"{fn}.{file_ext}"
+                        dl_fn = f"{fn}.{dl_ext}"
+                        with st.spinner(
+                            f"Converting to {choices['output_format']}…",
+                        ):
+                            converted = convert(
+                                gdf=None,
+                                output_name=output_fn,
+                                output_format=choices["output_format"],
+                                kmz_overlay=ds["kmz_overlay"],
+                                dst_srs=_crs_to_srs(target_crs),
+                            )
+                        st.session_state.converted_data = converted
+                        st.session_state.converted_fn = dl_fn
+                        st.session_state.converted_mime = mimetype
+                    except Exception as exc:
+                        _reset_converted()
+                        st.error(f"Conversion failed: {exc}")
 
-    preview_col, convert_col = st.columns([2, 1])
-
-    with convert_col:
-        st.markdown("### Convert")
-        choices = _render_convert_controls(gdf, allow_columns=True, key_prefix="single")
-
-        if st.button("Convert", type="primary", use_container_width=True):
-            try:
-                target_crs = _resolve_target_crs(
-                    choices["crs_choice"],
-                    choices["custom_epsg"],
-                    gdf,
+            if st.session_state.converted_data is not None:
+                size_kb = len(st.session_state.converted_data) / 1024
+                st.success(
+                    f"Ready: **{st.session_state.converted_fn}** ({size_kb:,.1f} KB)",
                 )
-                transformed = _transform_gdf(
-                    gdf,
-                    target_crs=target_crs,
-                    columns=choices["selected_cols"],
-                    fix_invalid=choices["fix_invalid"],
-                )
-                file_ext, dl_ext, mimetype = output_format_dict[
-                    choices["output_format"]
-                ]
-                output_fn = f"{fn}.{file_ext}"
-                dl_fn = f"{fn}.{dl_ext}"
-                with st.spinner(f"Converting to {choices['output_format']}…"):
-                    converted = convert(
-                        gdf=transformed,
-                        output_name=output_fn,
-                        output_format=choices["output_format"],
-                    )
-                st.session_state.converted_data = converted
-                st.session_state.converted_fn = dl_fn
-                st.session_state.converted_mime = mimetype
-            except Exception as exc:
-                _reset_converted()
-                st.error(f"Conversion failed: {exc}")
-
-        if st.session_state.converted_data is not None:
-            size_kb = len(st.session_state.converted_data) / 1024
-            st.success(
-                f"Ready: **{st.session_state.converted_fn}** ({size_kb:,.1f} KB)",
-            )
-            st.download_button(
-                label=f"⬇️ Download {st.session_state.converted_fn}",
-                data=st.session_state.converted_data,
-                file_name=st.session_state.converted_fn,
-                mime=st.session_state.converted_mime,
-                use_container_width=True,
-            )
-
-    with preview_col:
-        attr_tab, map_tab = st.tabs(["Attributes", "Map preview"])
-        with attr_tab:
-            geom_name = gdf.geometry.name
-            display_df = gdf.drop(columns=[geom_name]).rename(columns=str)
-            try:
-                st.dataframe(
-                    display_df,
+                st.download_button(
+                    label=f"⬇️ Download {st.session_state.converted_fn}",
+                    data=st.session_state.converted_data,
+                    file_name=st.session_state.converted_fn,
+                    mime=st.session_state.converted_mime,
                     use_container_width=True,
-                    height=400,
                 )
-            except Exception as exc:
-                st.warning(f"Unable to render attribute table ({exc}).")
-                st.dataframe(display_df.astype(str), use_container_width=True)
-        with map_tab:
-            _render_map_preview(gdf)
+    else:
+        gdf = ds["gdf"]
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Features", f"{len(gdf):,}")
+        c2.metric("Attributes", f"{max(gdf.shape[1] - 1, 0):,}")
+        c3.metric("CRS", str(gdf.crs) if gdf.crs else "unknown")
+
+        try:
+            geom_types = gdf.geometry.geom_type.value_counts()
+            if len(geom_types):
+                st.caption(
+                    "Geometry types: "
+                    + ", ".join(f"{t} ({n:,})" for t, n in geom_types.items()),
+                )
+        except AttributeError, TypeError, ValueError:
+            pass
+
+        st.divider()
+
+        preview_col, convert_col = st.columns([2, 1])
+
+        with convert_col:
+            st.markdown("### Convert")
+            choices = _render_convert_controls(
+                datasets,
+                allow_columns=True,
+                key_prefix="single",
+            )
+
+            if st.button("Convert", type="primary", use_container_width=True):
+                if choices["output_format"] is None:
+                    st.error("Choose a compatible output format before converting.")
+                else:
+                    try:
+                        target_crs = _resolve_target_crs(
+                            choices["crs_choice"],
+                            choices["custom_epsg"],
+                            gdf,
+                        )
+                        transformed = _transform_gdf(
+                            gdf,
+                            target_crs=target_crs,
+                            columns=choices["selected_cols"],
+                            fix_invalid=choices["fix_invalid"],
+                        )
+                        file_ext, dl_ext, mimetype = output_format_dict[
+                            choices["output_format"]
+                        ]
+                        output_fn = f"{fn}.{file_ext}"
+                        dl_fn = f"{fn}.{dl_ext}"
+                        with st.spinner(
+                            f"Converting to {choices['output_format']}…",
+                        ):
+                            converted = convert(
+                                gdf=transformed,
+                                output_name=output_fn,
+                                output_format=choices["output_format"],
+                            )
+                        st.session_state.converted_data = converted
+                        st.session_state.converted_fn = dl_fn
+                        st.session_state.converted_mime = mimetype
+                    except Exception as exc:
+                        _reset_converted()
+                        st.error(f"Conversion failed: {exc}")
+
+            if st.session_state.converted_data is not None:
+                size_kb = len(st.session_state.converted_data) / 1024
+                st.success(
+                    f"Ready: **{st.session_state.converted_fn}** ({size_kb:,.1f} KB)",
+                )
+                st.download_button(
+                    label=f"⬇️ Download {st.session_state.converted_fn}",
+                    data=st.session_state.converted_data,
+                    file_name=st.session_state.converted_fn,
+                    mime=st.session_state.converted_mime,
+                    use_container_width=True,
+                )
+
+        with preview_col:
+            attr_tab, map_tab = st.tabs(["Attributes", "Map preview"])
+            with attr_tab:
+                geom_name = gdf.geometry.name
+                display_df = gdf.drop(columns=[geom_name]).rename(columns=str)
+                try:
+                    st.dataframe(
+                        display_df,
+                        use_container_width=True,
+                        height=400,
+                    )
+                except Exception as exc:
+                    st.warning(f"Unable to render attribute table ({exc}).")
+                    st.dataframe(display_df.astype(str), use_container_width=True)
+            with map_tab:
+                _render_map_preview(gdf)
 else:
     # --- Batch mode ---
     st.subheader(f"{len(datasets)} datasets loaded")
 
     summary_rows = []
     for ds in datasets:
+        if _dataset_kind(ds) == "kmz_overlay":
+            summary_rows.append(
+                {
+                    "name": ds["name"],
+                    "features": "GroundOverlay",
+                    "attributes": 0,
+                    "crs": "from LatLonQuad",
+                    "geom_types": "raster",
+                },
+            )
+            continue
         g = ds["gdf"]
         try:
             geom_types = sorted(g.geometry.geom_type.dropna().unique().tolist())
@@ -505,7 +650,7 @@ else:
         )
         # Column selection doesn't apply in batch (schemas may differ).
         choices = _render_convert_controls(
-            datasets[0]["gdf"],
+            datasets,
             allow_columns=False,
             key_prefix="batch",
         )
@@ -515,58 +660,81 @@ else:
             type="primary",
             use_container_width=True,
         ):
-            try:
-                output_format = choices["output_format"]
-                file_ext, dl_ext, _mimetype = output_format_dict[output_format]
+            if choices["output_format"] is None:
+                st.error("Choose a compatible output format before converting.")
+            else:
+                try:
+                    output_format = choices["output_format"]
+                    file_ext, dl_ext, _mimetype = output_format_dict[output_format]
 
-                batch_buffer = io.BytesIO()
-                with zipfile.ZipFile(
-                    batch_buffer,
-                    "w",
-                    zipfile.ZIP_DEFLATED,
-                ) as outer_zip:
-                    for ds in datasets:
-                        name = ds["name"]
-                        target_crs = _resolve_target_crs(
-                            choices["crs_choice"],
-                            choices["custom_epsg"],
-                            ds["gdf"],
-                        )
-                        transformed = _transform_gdf(
-                            ds["gdf"],
-                            target_crs=target_crs,
-                            columns=None,
-                            fix_invalid=choices["fix_invalid"],
-                        )
-                        with st.spinner(f"Converting {name}…"):
-                            out_bytes = convert(
-                                gdf=transformed,
-                                output_name=f"{name}.{file_ext}",
-                                output_format=output_format,
-                            )
-                        # For formats that are themselves zips (shapefile,
-                        # gdb), unpack into a subdirectory instead of
-                        # nesting zips.
-                        if dl_ext == "zip":
-                            with zipfile.ZipFile(
-                                io.BytesIO(out_bytes),
-                            ) as inner:
-                                for info in inner.infolist():
-                                    outer_zip.writestr(
-                                        f"{name}/{info.filename}",
-                                        inner.read(info.filename),
+                    batch_buffer = io.BytesIO()
+                    with zipfile.ZipFile(
+                        batch_buffer,
+                        "w",
+                        zipfile.ZIP_DEFLATED,
+                    ) as outer_zip:
+                        for ds in datasets:
+                            name = ds["name"]
+                            if _dataset_kind(ds) == "kmz_overlay":
+                                target_crs = _resolve_target_crs(
+                                    choices["crs_choice"],
+                                    choices["custom_epsg"],
+                                    gpd.GeoDataFrame(
+                                        geometry=[Point(0, 0)],
+                                        crs="EPSG:4326",
+                                    ),
+                                )
+                                with st.spinner(f"Converting {name}…"):
+                                    out_bytes = convert(
+                                        gdf=None,
+                                        output_name=f"{name}.{file_ext}",
+                                        output_format=output_format,
+                                        kmz_overlay=ds["kmz_overlay"],
+                                        dst_srs=_crs_to_srs(target_crs),
                                     )
-                        else:
-                            outer_zip.writestr(f"{name}.{dl_ext}", out_bytes)
+                                outer_zip.writestr(f"{name}.{dl_ext}", out_bytes)
+                                continue
 
-                st.session_state.converted_data = batch_buffer.getvalue()
-                st.session_state.converted_fn = (
-                    f"converted_{len(datasets)}_datasets.zip"
-                )
-                st.session_state.converted_mime = "application/zip"
-            except Exception as exc:
-                _reset_converted()
-                st.error(f"Batch conversion failed: {exc}")
+                            target_crs = _resolve_target_crs(
+                                choices["crs_choice"],
+                                choices["custom_epsg"],
+                                ds["gdf"],
+                            )
+                            transformed = _transform_gdf(
+                                ds["gdf"],
+                                target_crs=target_crs,
+                                columns=None,
+                                fix_invalid=choices["fix_invalid"],
+                            )
+                            with st.spinner(f"Converting {name}…"):
+                                out_bytes = convert(
+                                    gdf=transformed,
+                                    output_name=f"{name}.{file_ext}",
+                                    output_format=output_format,
+                                )
+                            # For formats that are themselves zips (shapefile,
+                            # gdb), unpack into a subdirectory instead of
+                            # nesting zips.
+                            if dl_ext == "zip":
+                                with zipfile.ZipFile(
+                                    io.BytesIO(out_bytes),
+                                ) as inner:
+                                    for info in inner.infolist():
+                                        outer_zip.writestr(
+                                            f"{name}/{info.filename}",
+                                            inner.read(info.filename),
+                                        )
+                            else:
+                                outer_zip.writestr(f"{name}.{dl_ext}", out_bytes)
+
+                    st.session_state.converted_data = batch_buffer.getvalue()
+                    st.session_state.converted_fn = (
+                        f"converted_{len(datasets)}_datasets.zip"
+                    )
+                    st.session_state.converted_mime = "application/zip"
+                except Exception as exc:
+                    _reset_converted()
+                    st.error(f"Batch conversion failed: {exc}")
 
         if st.session_state.converted_data is not None:
             size_kb = len(st.session_state.converted_data) / 1024

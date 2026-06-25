@@ -53,7 +53,7 @@ ignore = ["E501"]
 
 [tool.setuptools]
 package-dir = { "" = "geospatial-data-converter" }
-py-modules = ["app", "arcgis_loader", "kml_tricks", "utils"]
+py-modules = ["app", "arcgis_loader", "geotiff_tricks", "kml_tricks", "utils"]
 
 [tool.pytest.ini_options]
 pythonpath = ["geospatial-data-converter"]
