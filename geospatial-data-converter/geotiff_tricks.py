@@ -11,14 +11,16 @@ from defusedxml import ElementTree as ET
 _KML_NAMESPACE = "http://www.opengis.net/kml/2.2"
 _GX_NAMESPACE = "http://www.google.com/kml/ext/2.2"
 
-_WARP_CREATION_OPTIONS = [
-    "TILED=YES",
-    "COMPRESS=JPEG",
-    "JPEG_QUALITY=50",
-    "BIGTIFF=IF_SAFER",
-    "BLOCKXSIZE=512",
-    "BLOCKYSIZE=512",
-]
+
+def _warp_creation_options(jpeg_quality: int = 50) -> list[str]:
+    return [
+        "TILED=YES",
+        "COMPRESS=JPEG",
+        f"JPEG_QUALITY={jpeg_quality}",
+        "BIGTIFF=IF_SAFER",
+        "BLOCKXSIZE=512",
+        "BLOCKYSIZE=512",
+    ]
 
 
 def _require_gdal_cli() -> None:
@@ -125,8 +127,12 @@ def convert_kmz_ground_overlay_to_geotiff(
     kmz_source: str | BinaryIO,
     output_path: str,
     dst_srs: str = "EPSG:4326",
+    jpeg_quality: int = 50,
 ) -> None:
     """Convert a KMZ GroundOverlay image to a tiled, compressed GeoTIFF."""
+    if jpeg_quality < 1 or jpeg_quality > 100:
+        raise ValueError("JPEG quality must be between 1 and 100.")
+
     _require_gdal_cli()
 
     from tempfile import TemporaryDirectory
@@ -161,23 +167,17 @@ def convert_kmz_ground_overlay_to_geotiff(
         ]
         subprocess.run(translate_cmd, check=True, capture_output=True, text=True)
 
+        warp_options = _warp_creation_options(jpeg_quality)
         warp_cmd = [
             "gdalwarp",
             "-tps",
             "-t_srs",
             dst_srs,
-            "-co",
-            _WARP_CREATION_OPTIONS[0],
-            "-co",
-            _WARP_CREATION_OPTIONS[1],
-            "-co",
-            _WARP_CREATION_OPTIONS[2],
-            "-co",
-            _WARP_CREATION_OPTIONS[3],
-            "-co",
-            _WARP_CREATION_OPTIONS[4],
-            "-co",
-            _WARP_CREATION_OPTIONS[5],
+            *[
+                item
+                for option in warp_options
+                for item in ("-co", option)
+            ],
             tmp_tif,
             output_path,
         ]

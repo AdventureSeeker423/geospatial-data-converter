@@ -554,6 +554,7 @@ def convert(
     *,
     kmz_overlay: bytes | None = None,
     dst_srs: str | None = None,
+    jpeg_quality: int = 50,
 ) -> bytes:
     """Convert a GeoDataFrame or KMZ GroundOverlay to the specified format."""
     if output_format == "GeoTIFF":
@@ -568,6 +569,7 @@ def convert(
                 io.BytesIO(kmz_overlay),
                 out_path,
                 dst_srs=dst_srs or "EPSG:4326",
+                jpeg_quality=jpeg_quality,
             )
             with open(out_path, "rb") as geotiff_file:
                 return geotiff_file.read()
